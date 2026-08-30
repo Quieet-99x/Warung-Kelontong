@@ -1,10 +1,13 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import Dashboard from "./Dashboard";
 
 describe("Dashboard forms", () => {
-  beforeEach(() => localStorage.clear());
+  beforeEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
 
   it("accepts whole-rupiah amounts without an invalid step constraint", async () => {
     render(<Dashboard />);
@@ -25,6 +28,14 @@ describe("Dashboard forms", () => {
     await userEvent.clear(phone);
     await userEvent.type(phone, "abc081234567890xyz");
     expect(phone).toBeInvalid();
+  });
+
+  it("opens the data and backup center from store settings", async () => {
+    render(<Dashboard />);
+    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: "Pengaturan warung" }));
+    await userEvent.click(screen.getByRole("button", { name: /Pusat Data & Cadangan/i }));
+    expect(screen.getByRole("heading", { name: "Pusat Data & Cadangan" })).toBeInTheDocument();
   });
 
   it("does not overwrite corrupt stored data during initial hydration", async () => {
