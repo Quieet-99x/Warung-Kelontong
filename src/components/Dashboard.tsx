@@ -1,8 +1,135 @@
 "use client";
-import {useMemo,useState} from "react"; import {BookOpenCheck,CheckCircle2,DatabaseBackup,History,Plus,Search,Settings2,UsersRound,WalletCards} from "lucide-react"; import {useKasbonStore} from "@/hooks/useKasbonStore"; import BackupModal from "./BackupModal"; import {DebtCard} from "./DebtCard"; import {Modal} from "./Modal"; import {formatDate,formatIDR,isValidWhatsAppNumber,parseIDRInput} from "@/lib/utils"; import type {DebtItem} from "@/types";
-type ModalState={kind:"add"|"pay"|"increase"|"settings"|"backup";debt?:DebtItem}|null;
-export default function Dashboard(){ const store=useKasbonStore(); const [tab,setTab]=useState<"active"|"paid">("active"); const [search,setSearch]=useState(""); const [modal,setModal]=useState<ModalState>(null); const list=tab==="active"?store.active:store.paid; const filtered=useMemo(()=>list.filter(d=>(d.customerName+d.phoneNumber+d.itemsDescription).toLowerCase().includes(search.toLowerCase())),[list,search]);
- if(!store.hydrated)return <main className="app-shell loading">Membuka buku kasbon…</main>;
- return <main className="app-shell"><section className="hero"><div className="brand-row"><div className="brand-mark"><BookOpenCheck size={22}/></div><div><span>BUKU KASBON DIGITAL</span><h1>{store.store.storeName}</h1><p>{store.store.ownerName}</p></div><button className="settings" onClick={()=>setModal({kind:"settings"})} aria-label="Pengaturan warung"><Settings2 size={19}/></button></div><div className="total-label"><span>Total piutang aktif</span><strong>{formatIDR(store.totalReceivable)}</strong><p><UsersRound size={15}/>{store.active.length} pelanggan masih memiliki kasbon</p></div></section><section className="content"><div className="action-heading"><div><p>Selamat datang kembali 👋</p><h2>Kelola kasbon dengan mudah</h2></div><button className="primary" onClick={()=>setModal({kind:"add"})}><Plus size={19}/> Catat kasbon</button></div><label className="search"><Search size={18}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Cari nama, nomor HP, atau barang…"/></label><nav className="tabs"><button className={tab==="active"?"active":""} onClick={()=>setTab("active")}><WalletCards size={17}/>Kasbon Aktif <b>{store.active.length}</b></button><button className={tab==="paid"?"active":""} onClick={()=>setTab("paid")}><History size={17}/>Riwayat Lunas</button></nav><div className="list-head"><h2>{tab==="active"?"Daftar kasbon":"Riwayat pelunasan"}</h2><span>{filtered.length} catatan</span></div>{filtered.length?<div className="debt-list">{filtered.map(d=>tab==="active"?<DebtCard key={d.id} debt={d} store={store.store} onAdd={()=>setModal({kind:"increase",debt:d})} onPay={()=>setModal({kind:"pay",debt:d})}/>:<article className="history-card" key={d.id}><div className="paid-icon"><CheckCircle2/></div><div><h3>{d.customerName}</h3><p>{d.itemsDescription}</p><span>Lunas · {formatDate(d.paymentHistory.at(-1)?.paidAt??d.createdAt)}</span></div><strong>{formatIDR(d.totalAmount)}</strong></article>)}</div>:<div className="empty"><div><BookOpenCheck size={28}/></div><h3>{search?"Catatan tidak ditemukan":tab==="active"?"Belum ada kasbon aktif":"Belum ada riwayat lunas"}</h3><p>{search?"Coba kata pencarian lain.":tab==="active"?"Mulai catat kasbon pelanggan pertama Anda.":"Kasbon yang sudah lunas akan tampil di sini."}</p>{!search&&tab==="active"&&<button className="primary" onClick={()=>setModal({kind:"add"})}><Plus size={18}/> Catat kasbon</button>}</div>}</section>{modal?.kind==="backup"?<BackupModal open onClose={()=>setModal(null)} storeProfile={store.store} debts={store.debts} onRestored={()=>window.location.reload()}/>:<FormModal state={modal} close={()=>setModal(null)} store={store} openBackup={()=>setModal({kind:"backup"})}/>}<footer>Data tersimpan aman di perangkat ini · Bisa digunakan tanpa internet</footer></main> }
-function FormModal({state,close,store,openBackup}:{state:ModalState;close:()=>void;store:ReturnType<typeof useKasbonStore>;openBackup:()=>void}){ const submit=(e:React.FormEvent<HTMLFormElement>)=>{e.preventDefault();const f=new FormData(e.currentTarget);if(state?.kind==="add"){const phone=String(f.get("phone"));if(!isValidWhatsAppNumber(phone))return;store.addDebt({customerName:String(f.get("name")),phoneNumber:phone,itemsDescription:String(f.get("items")),totalAmount:parseIDRInput(String(f.get("amount"))),dueDate:String(f.get("due"))||undefined})};if(state?.kind==="pay"&&state.debt)store.payDebt(state.debt.id,parseIDRInput(String(f.get("amount"))));if(state?.kind==="increase"&&state.debt)store.addToDebt(state.debt.id,parseIDRInput(String(f.get("amount"))),String(f.get("items")));if(state?.kind==="settings")store.setStore({storeName:String(f.get("storeName")),ownerName:String(f.get("ownerName")),paymentInfo:String(f.get("paymentInfo"))});close()}; if(!state||state.kind==="backup")return null; const titles={add:"Catat kasbon baru",pay:"Catat pembayaran",increase:"Tambah kasbon",settings:"Pengaturan warung"};return <Modal open title={titles[state.kind]} subtitle={state.debt?state.debt.customerName:state.kind==="add"?"Isi data pelanggan dan belanjaannya":"Perbarui identitas dan info pembayaran"} onClose={close}><form onSubmit={submit} className="form">{state.kind==="add"&&<><Field name="name" label="Nama pelanggan" placeholder="Contoh: Ibu Siti"/><Field name="phone" label="Nomor WhatsApp" type="tel" inputMode="tel" pattern="(?:[+]62|62|0)(?: |-)*8(?:(?: |-)*[0-9]){8,11}(?: |-)*" title="Gunakan nomor Indonesia aktif, contoh 081234567890" placeholder="08xxxxxxxxxx"/><Field name="items" label="Barang yang diambil" placeholder="Contoh: Beras 5 kg, minyak 2 L"/><Field name="amount" label="Total kasbon" type="number" inputMode="numeric" min={1} step={1} placeholder="Rp 0"/><Field name="due" label="Jatuh tempo (opsional)" type="date"/></>}{state.kind==="increase"&&<><Field name="items" label="Barang tambahan" placeholder="Contoh: Telur 1 kg"/><Field name="amount" label="Nominal tambahan" type="number" inputMode="numeric" min={1} step={1} placeholder="Rp 0"/></>}{state.kind==="pay"&&<><div className="balance-note"><span>Sisa kasbon saat ini</span><strong>{formatIDR(state.debt!.remainingAmount)}</strong></div><Field name="amount" label="Nominal pembayaran" type="number" inputMode="numeric" min={1} step={1} placeholder="Rp 0" max={state.debt!.remainingAmount}/></>}{state.kind==="settings"&&<><Field name="storeName" label="Nama warung" defaultValue={store.store.storeName}/><Field name="ownerName" label="Nama pemilik" defaultValue={store.store.ownerName}/><label className="field"><span>Info pembayaran (opsional)</span><textarea name="paymentInfo" defaultValue={store.store.paymentInfo} placeholder="Contoh: QRIS tersedia / BCA 123..."/></label><button type="button" className="data-center-entry" onClick={openBackup}><DatabaseBackup size={19}/><span><strong>Pusat Data & Cadangan</strong><small>Export rekap, backup, atau pulihkan data</small></span></button></>}<div className="form-actions"><button type="button" onClick={close}>Batal</button><button className="primary" type="submit">Simpan catatan</button></div></form></Modal>}
-function Field(props:React.InputHTMLAttributes<HTMLInputElement>&{label:string}){const {label,...rest}=props;return <label className="field"><span>{label}</span><input required={rest.name!=="due"} {...rest}/></label>}
+
+import { useMemo, useState } from "react";
+import { BookOpenCheck, CheckCircle2, DatabaseBackup, History, Plus, Search, Settings2, UsersRound, WalletCards } from "lucide-react";
+import { useKasbonStore } from "@/hooks/useKasbonStore";
+import { formatDate, formatIDR, isValidWhatsAppNumber, parseIDRInput } from "@/lib/utils";
+import type { DebtItem } from "@/types";
+import BackupModal from "./BackupModal";
+import { DebtCard } from "./DebtCard";
+import { Modal } from "./Modal";
+
+export type KasbonStore = ReturnType<typeof useKasbonStore>;
+type ModalState = { kind: "add" | "pay" | "increase" | "settings" | "backup"; debt?: DebtItem } | null;
+
+interface DashboardProps {
+  store: KasbonStore;
+  debtPrefill?: number | null;
+  onDebtPrefillConsumed?: () => void;
+}
+
+export default function Dashboard() {
+  const store = useKasbonStore();
+  return <DashboardView store={store}/>;
+}
+
+export function DashboardView({ store, debtPrefill, onDebtPrefillConsumed }: DashboardProps) {
+  const [tab, setTab] = useState<"active" | "paid">("active");
+  const [search, setSearch] = useState("");
+  const [modal, setModal] = useState<ModalState>(null);
+  const list = tab === "active" ? store.active : store.paid;
+  const filtered = useMemo(() => list.filter(debt =>
+    (debt.customerName + debt.phoneNumber + debt.itemsDescription).toLowerCase().includes(search.toLowerCase()),
+  ), [list, search]);
+
+  const effectiveModal: ModalState = modal ?? (debtPrefill && debtPrefill > 0 ? { kind: "add" } : null);
+
+  const closeModal = () => {
+    if (effectiveModal?.kind === "add" && debtPrefill) onDebtPrefillConsumed?.();
+    setModal(null);
+  };
+
+  if (!store.hydrated) return <main className="app-shell loading">Membuka buku kasbon…</main>;
+
+  return <main className="app-shell">
+    <section className="hero">
+      <div className="brand-row">
+        <div className="brand-mark"><BookOpenCheck size={22}/></div>
+        <div><span>BUKU KASBON DIGITAL</span><h1>{store.store.storeName}</h1><p>{store.store.ownerName}</p></div>
+        <button className="settings" onClick={() => setModal({ kind: "settings" })} aria-label="Pengaturan warung"><Settings2 size={19}/></button>
+      </div>
+      <div className="total-label">
+        <span>Total piutang aktif</span><strong>{formatIDR(store.totalReceivable)}</strong>
+        <p><UsersRound size={15}/>{store.active.length} pelanggan masih memiliki kasbon</p>
+      </div>
+    </section>
+
+    <section className="content">
+      <div className="action-heading"><div><p>Selamat datang kembali 👋</p><h2>Kelola kasbon dengan mudah</h2></div><button className="primary" onClick={() => setModal({ kind: "add" })}><Plus size={19}/> Catat kasbon</button></div>
+      <label className="search"><Search size={18}/><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Cari nama, nomor HP, atau barang…"/></label>
+      <nav className="tabs">
+        <button className={tab === "active" ? "active" : ""} onClick={() => setTab("active")}><WalletCards size={17}/>Kasbon Aktif <b>{store.active.length}</b></button>
+        <button className={tab === "paid" ? "active" : ""} onClick={() => setTab("paid")}><History size={17}/>Riwayat Lunas</button>
+      </nav>
+      <div className="list-head"><h2>{tab === "active" ? "Daftar kasbon" : "Riwayat pelunasan"}</h2><span>{filtered.length} catatan</span></div>
+      {filtered.length ? <div className="debt-list">{filtered.map(debt => tab === "active"
+        ? <DebtCard key={debt.id} debt={debt} store={store.store} onAdd={() => setModal({ kind: "increase", debt })} onPay={() => setModal({ kind: "pay", debt })}/>
+        : <article className="history-card" key={debt.id}><div className="paid-icon"><CheckCircle2/></div><div><h3>{debt.customerName}</h3><p>{debt.itemsDescription}</p><span>Lunas · {formatDate(debt.paymentHistory.at(-1)?.paidAt ?? debt.createdAt)}</span></div><strong>{formatIDR(debt.totalAmount)}</strong></article>,
+      )}</div> : <div className="empty"><div><BookOpenCheck size={26}/></div><h3>{tab === "active" ? "Belum ada kasbon aktif" : "Belum ada riwayat lunas"}</h3><p>{tab === "active" ? "Mulai catat kasbon pelanggan pertama Anda." : "Kasbon yang lunas akan tampil di sini."}</p>{tab === "active" && <button className="primary" onClick={() => setModal({ kind: "add" })}>Catat kasbon</button>}</div>}
+    </section>
+    <footer>Data tersimpan otomatis di perangkat ini · Gunakan cadangan saat pindah HP</footer>
+
+    <FormModal state={effectiveModal} close={closeModal} store={store} openBackup={() => setModal({ kind: "backup" })} debtPrefill={debtPrefill}/>
+    <BackupModal open={effectiveModal?.kind === "backup"} onClose={() => setModal(null)} storeProfile={store.store} debts={store.debts} onRestored={() => window.location.reload()}/>
+  </main>;
+}
+
+function FormModal({ state, close, store, openBackup, debtPrefill }: {
+  state: ModalState;
+  close: () => void;
+  store: KasbonStore;
+  openBackup: () => void;
+  debtPrefill?: number | null;
+}) {
+  if (!state || state.kind === "backup") return null;
+  const submit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (state.kind === "add") {
+      const phone = String(form.get("phone"));
+      if (!isValidWhatsAppNumber(phone)) return;
+      store.addDebt({
+        customerName: String(form.get("name")),
+        phoneNumber: phone,
+        itemsDescription: String(form.get("items")),
+        totalAmount: parseIDRInput(String(form.get("amount"))),
+        dueDate: String(form.get("due")) || undefined,
+      });
+    }
+    if (state.kind === "pay" && state.debt) store.payDebt(state.debt.id, parseIDRInput(String(form.get("amount"))));
+    if (state.kind === "increase" && state.debt) store.addToDebt(state.debt.id, parseIDRInput(String(form.get("amount"))), String(form.get("items")));
+    if (state.kind === "settings") store.setStore({
+      storeName: String(form.get("storeName")),
+      ownerName: String(form.get("ownerName")),
+      paymentInfo: String(form.get("paymentInfo")),
+    });
+    close();
+  };
+  const titles = { add: "Catat kasbon baru", pay: "Catat pembayaran", increase: "Tambah kasbon", settings: "Pengaturan warung" };
+  const subtitle = state.debt ? state.debt.customerName : state.kind === "add" ? "Isi data pelanggan dan belanjaannya" : "Perbarui identitas dan info pembayaran";
+  return <Modal open title={titles[state.kind]} subtitle={subtitle} onClose={close}>
+    <form onSubmit={submit} className="form">
+      {state.kind === "add" && <>
+        <Field name="name" label="Nama pelanggan" placeholder="Contoh: Ibu Siti"/>
+        <Field name="phone" label="Nomor WhatsApp" type="tel" inputMode="tel" pattern="(?:[+]62|62|0)(?: |-)*8(?:(?: |-)*[0-9]){8,11}(?: |-)*" title="Gunakan nomor Indonesia aktif, contoh 081234567890" placeholder="08xxxxxxxxxx"/>
+        <Field name="items" label="Barang yang diambil" placeholder="Contoh: Beras 5 kg, minyak 2 L"/>
+        <Field name="amount" label="Total kasbon" type="number" inputMode="numeric" min={1} step={1} defaultValue={debtPrefill ?? undefined} placeholder="Rp 0"/>
+        <Field name="due" label="Jatuh tempo (opsional)" type="date"/>
+      </>}
+      {state.kind === "pay" && <><div className="balance-note"><span>Sisa kasbon</span><strong>{formatIDR(state.debt?.remainingAmount ?? 0)}</strong></div><Field name="amount" label="Jumlah pembayaran" type="number" inputMode="numeric" min={1} max={state.debt?.remainingAmount} step={1}/></>}
+      {state.kind === "increase" && <><Field name="items" label="Barang tambahan"/><Field name="amount" label="Nominal tambahan" type="number" inputMode="numeric" min={1} step={1}/></>}
+      {state.kind === "settings" && <>
+        <Field name="storeName" label="Nama warung" defaultValue={store.store.storeName}/>
+        <Field name="ownerName" label="Nama pemilik" defaultValue={store.store.ownerName}/>
+        <Field name="paymentInfo" label="Info pembayaran (opsional)" defaultValue={store.store.paymentInfo}/>
+        <button type="button" className="data-center-entry" onClick={openBackup}><DatabaseBackup size={20}/><span><strong>Pusat Data & Cadangan</strong><small>Export rekap, backup, atau pulihkan data</small></span></button>
+      </>}
+      <div className="form-actions"><button type="button" onClick={close}>Batal</button><button className="primary" type="submit">Simpan catatan</button></div>
+    </form>
+  </Modal>;
+}
+
+function Field(props: React.InputHTMLAttributes<HTMLInputElement> & { label: string }) {
+  const { label, ...rest } = props;
+  return <label className="field"><span>{label}</span><input required={rest.name !== "due" && rest.name !== "paymentInfo"} {...rest}/></label>;
+}

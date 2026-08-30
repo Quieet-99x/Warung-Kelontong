@@ -1,12 +1,15 @@
 import type { DebtItem, StoreProfile } from "@/types";
+import type { DailyClosingRecord } from "@/types/cashflow";
 import type { PurchaseReceipt } from "@/types/receipt";
 import { parseStoredDebts, parseStoredStore } from "./storage";
 import { parseStoredPurchases } from "./purchase-storage";
+import { parseStoredDailyClosings } from "./cashflow";
 
 export const STORAGE_KEYS = {
   store: "buku-kasbon.store.v1",
   debts: "buku-kasbon.debts.v1",
   receipts: "buku-kasbon.purchases.v1",
+  dailyClosings: "daily_closings",
 } as const;
 
 export const MAX_CHECKPOINT_BYTES = 5_000_000;
@@ -15,10 +18,11 @@ export interface BackupData {
   storeProfile: StoreProfile;
   debts: DebtItem[];
   receipts: PurchaseReceipt[];
+  dailyClosings?: DailyClosingRecord[];
 }
 
 export interface Checkpoint {
-  version: "1.0";
+  version: "1.0" | "2.0";
   backupDate: string;
   data: BackupData;
 }
@@ -78,7 +82,8 @@ export function buildMonthlyCSV(monthYear: string, debts: DebtItem[], receipts: 
 }
 
 export function buildCheckpoint(data: BackupData, backupDate = new Date().toISOString()): string {
-  const checkpoint = JSON.stringify({ version: "1.0", backupDate, data } satisfies Checkpoint, null, 2);
+  const normalizedData = { ...data, dailyClosings: data.dailyClosings ?? [] };
+  const checkpoint = JSON.stringify({ version: "2.0", backupDate, data: normalizedData } satisfies Checkpoint, null, 2);
   if (new TextEncoder().encode(checkpoint).byteLength > MAX_CHECKPOINT_BYTES) {
     throw new Error("File checkpoint terlalu besar untuk dicadangkan.");
   }
@@ -109,6 +114,16 @@ function parseAllReceipts(value: unknown): PurchaseReceipt[] | null {
   return totalsAreCanonical ? parsed : null;
 }
 
+function parseAllDailyClosings(value: unknown): DailyClosingRecord[] | null {
+  if (!Array.isArray(value)) return null;
+  const parsed = parseStoredDailyClosings(JSON.stringify(value));
+  if (!parsed || parsed.length !== value.length) return null;
+  if (!hasUniqueIds(parsed.map(record => record.id)) || !hasUniqueIds(parsed.map(record => record.date))) return null;
+  return parsed.every(record => record.netCashflow === record.manualIncome + record.paidDebtsToday - record.totalExpenseToday)
+    ? parsed
+    : null;
+}
+
 export function parseCheckpoint(text: string): Checkpoint {
   if (new TextEncoder().encode(text).byteLength > MAX_CHECKPOINT_BYTES) {
     throw new Error("File checkpoint terlalu besar.");
@@ -119,7 +134,7 @@ export function parseCheckpoint(text: string): Checkpoint {
   } catch {
     throw new Error("Format file checkpoint tidak valid.");
   }
-  if (!isRecord(value) || value.version !== "1.0") throw new Error("Versi checkpoint tidak didukung.");
+  if (!isRecord(value) || (value.version !== "1.0" && value.version !== "2.0")) throw new Error("Versi checkpoint tidak didukung.");
   if (typeof value.backupDate !== "string" || Number.isNaN(Date.parse(value.backupDate))) {
     throw new Error("Tanggal checkpoint tidak valid.");
   }
@@ -127,8 +142,9 @@ export function parseCheckpoint(text: string): Checkpoint {
   const storeProfile = parseStoredStore(JSON.stringify(value.data.storeProfile));
   const debts = parseAllDebts(value.data.debts);
   const receipts = parseAllReceipts(value.data.receipts);
-  if (!storeProfile || !debts || !receipts) throw new Error("Data checkpoint tidak valid atau rusak.");
-  return { version: "1.0", backupDate: value.backupDate, data: { storeProfile, debts, receipts } };
+  const dailyClosings = value.version === "1.0" ? [] : parseAllDailyClosings(value.data.dailyClosings);
+  if (!storeProfile || !debts || !receipts || !dailyClosings) throw new Error("Data checkpoint tidak valid atau rusak.");
+  return { version: value.version, backupDate: value.backupDate, data: { storeProfile, debts, receipts, dailyClosings } };
 }
 
 export function restoreCheckpoint(storage: StorageLike, data: BackupData): void {
@@ -137,6 +153,7 @@ export function restoreCheckpoint(storage: StorageLike, data: BackupData): void 
     [STORAGE_KEYS.store, JSON.stringify(data.storeProfile)],
     [STORAGE_KEYS.debts, JSON.stringify(data.debts)],
     [STORAGE_KEYS.receipts, JSON.stringify(data.receipts)],
+    [STORAGE_KEYS.dailyClosings, JSON.stringify(data.dailyClosings ?? [])],
   ]);
   for (const key of next.keys()) previous.set(key, storage.getItem(key));
   try {
@@ -167,9 +184,11 @@ export function readCurrentBackup(
   const storeRaw = storage.getItem(STORAGE_KEYS.store);
   const debtsRaw = storage.getItem(STORAGE_KEYS.debts);
   const receiptsRaw = storage.getItem(STORAGE_KEYS.receipts);
+  const closingsRaw = storage.getItem(STORAGE_KEYS.dailyClosings);
   const storeProfile = storeRaw ? parseStoredStore(storeRaw) : fallback?.storeProfile ?? null;
   let debts = fallback?.debts ?? [];
   let receipts = fallback?.receipts ?? [];
+  let dailyClosings = fallback?.dailyClosings ?? [];
   if (debtsRaw) {
     try {
       const source: unknown = JSON.parse(debtsRaw);
@@ -188,8 +207,17 @@ export function readCurrentBackup(
       throw new Error("Data kulakan saat ini tidak valid dan belum dapat dicadangkan.");
     }
   }
+  if (closingsRaw) {
+    try {
+      const source: unknown = JSON.parse(closingsRaw);
+      dailyClosings = parseAllDailyClosings(source) ?? [];
+      if (!Array.isArray(source) || dailyClosings.length !== source.length) throw new Error();
+    } catch {
+      throw new Error("Data tutup buku saat ini tidak valid dan belum dapat dicadangkan.");
+    }
+  }
   if (!storeProfile) throw new Error("Profil warung saat ini tidak valid dan belum dapat dicadangkan.");
-  return { storeProfile, debts, receipts };
+  return { storeProfile, debts, receipts, dailyClosings };
 }
 
 export function downloadTextFile(content: string, mimeType: string, filename: string): void {

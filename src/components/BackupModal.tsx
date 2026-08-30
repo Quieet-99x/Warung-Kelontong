@@ -28,7 +28,7 @@ const currentMonth = () => new Date().toISOString().slice(0, 7);
 export default function BackupModal({ open, onClose, storeProfile, debts, onRestored }: BackupModalProps) {
   const [month, setMonth] = useState(currentMonth);
   const [checkpoint, setCheckpoint] = useState<Checkpoint | null>(null);
-  const [currentCounts, setCurrentCounts] = useState<{ debts: number; receipts: number } | null>(null);
+  const [currentCounts, setCurrentCounts] = useState<{ debts: number; receipts: number; closings: number } | null>(null);
   const [status, setStatus] = useState<{ kind: "error" | "success"; message: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const backupDate = useMemo(() => checkpoint ? new Intl.DateTimeFormat("id-ID", {
@@ -69,7 +69,7 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
       setCheckpoint(parsed);
       try {
         const current = readCurrentBackup(localStorage, { storeProfile, debts, receipts: [] });
-        setCurrentCounts({ debts: current.debts.length, receipts: current.receipts.length });
+        setCurrentCounts({ debts: current.debts.length, receipts: current.receipts.length, closings: current.dailyClosings?.length ?? 0 });
       } catch {
         setCurrentCounts(null);
       }
@@ -118,8 +118,8 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
       {checkpoint && <section className="restore-confirm" aria-label="Konfirmasi pemulihan data">
         <div className="restore-warning"><RotateCcw size={21}/><div><strong>Peringatan Pemulihan Data</strong><p>Cadangan “{checkpoint.data.storeProfile.storeName}” · {backupDate}</p></div></div>
         <div className="restore-comparison">
-          <span>Saat ini<strong>{currentCounts ? `${currentCounts.debts} kasbon · ${currentCounts.receipts} struk` : "Data saat ini bermasalah"}</strong></span>
-          <span>Akan menjadi<strong>{checkpoint.data.debts.length} kasbon · {checkpoint.data.receipts.length} struk</strong></span>
+          <span>Saat ini<strong>{currentCounts ? `${currentCounts.debts} kasbon · ${currentCounts.receipts} struk · ${currentCounts.closings} tutup buku` : "Data saat ini bermasalah"}</strong></span>
+          <span>Akan menjadi<strong>{checkpoint.data.debts.length} kasbon · {checkpoint.data.receipts.length} struk · ${checkpoint.data.dailyClosings?.length ?? 0} tutup buku</strong></span>
         </div>
         <p>Memulihkan data akan menggantikan—bukan menggabungkan—seluruh data yang ada saat ini di HP ini. Pastikan file yang dipilih benar.</p>
         <div className="restore-actions"><button type="button" onClick={() => setCheckpoint(null)}>Batal</button><button type="button" className="restore-danger" onClick={confirmRestore}>Ya, Pulihkan Data</button></div>

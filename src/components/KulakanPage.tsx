@@ -11,6 +11,7 @@ import { formatDate, formatIDR } from "@/lib/utils";
 import type { ReceiptExtraction, ReceiptItem } from "@/types/receipt";
 
 type Draft = ReceiptExtraction | null;
+export type PurchaseStore = ReturnType<typeof usePurchaseStore>;
 
 async function fileToDataUrl(file: File): Promise<string> {
   return await new Promise((resolve, reject) => {
@@ -23,6 +24,10 @@ async function fileToDataUrl(file: File): Promise<string> {
 
 export default function KulakanPage() {
   const store = usePurchaseStore();
+  return <KulakanPageView store={store}/>;
+}
+
+export function KulakanPageView({ store }: { store: PurchaseStore }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [draft, setDraft] = useState<Draft>(null);
   const [margin, setMargin] = useState(15);

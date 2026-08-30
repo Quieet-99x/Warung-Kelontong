@@ -9,6 +9,7 @@ import {
 } from "./backup";
 import type { DebtItem, StoreProfile } from "@/types";
 import type { PurchaseReceipt } from "@/types/receipt";
+import type { DailyClosingRecord } from "@/types/cashflow";
 
 const store: StoreProfile = { storeName: "Warung Makmur", ownerName: "Rifki", paymentInfo: "BCA 123" };
 const debt: DebtItem = {
@@ -20,6 +21,11 @@ const receipt: PurchaseReceipt = {
   id: "r1", merchantName: "Grosir \"Berkah\"", purchaseDate: "2026-08-15",
   createdAt: "2026-08-15T11:00:00.000Z", grandTotal: 30000,
   items: [{ id: "i1", itemName: "Beras", qty: 2, unit: "Kg", unitPrice: 15000, totalPrice: 30000, recommendedSellPrice: 17500 }],
+};
+const closing: DailyClosingRecord = {
+  id: "c1", date: "2026-08-30", cashInDrawer: 150000, manualIncome: 200000,
+  paidDebtsToday: 50000, totalExpenseToday: 30000, newDebtsToday: 50000,
+  netCashflow: 220000, notes: "Tutup normal", closedAt: "2026-08-30T21:00:00.000Z",
 };
 
 describe("backup and recap engine", () => {
@@ -43,15 +49,40 @@ describe("backup and recap engine", () => {
   it("round-trips a versioned checkpoint through strict validation", () => {
     const text = buildCheckpoint({ storeProfile: store, debts: [debt], receipts: [receipt] }, "2026-08-30T12:00:00.000Z");
     expect(parseCheckpoint(text)).toEqual({
-      version: "1.0",
+      version: "2.0",
       backupDate: "2026-08-30T12:00:00.000Z",
+      data: { storeProfile: store, debts: [debt], receipts: [receipt], dailyClosings: [] },
+    });
+  });
+
+  it("backs up daily closings in v2 and imports legacy v1 checkpoints", () => {
+    const v2 = parseCheckpoint(buildCheckpoint({ storeProfile: store, debts: [], receipts: [], dailyClosings: [closing] }));
+    expect(v2).toMatchObject({ version: "2.0", data: { dailyClosings: [closing] } });
+
+    const legacy = JSON.stringify({
+      version: "1.0", backupDate: "2026-08-30T12:00:00.000Z",
       data: { storeProfile: store, debts: [debt], receipts: [receipt] },
     });
+    expect(parseCheckpoint(legacy)).toMatchObject({ version: "1.0", data: { dailyClosings: [] } });
+  });
+
+  it("rejects duplicate-date, inconsistent, and partially corrupt closings", () => {
+    expect(() => parseCheckpoint(buildCheckpoint({
+      storeProfile: store, debts: [], receipts: [], dailyClosings: [closing, { ...closing, id: "c2" }],
+    }))).toThrow(/tidak valid/i);
+    expect(() => parseCheckpoint(buildCheckpoint({
+      storeProfile: store, debts: [], receipts: [], dailyClosings: [{ ...closing, netCashflow: 1 }],
+    }))).toThrow(/tidak valid/i);
+    const corruptStorage = {
+      getItem: (key: string) => key === STORAGE_KEYS.dailyClosings ? JSON.stringify([closing, { id: "corrupt" }]) : null,
+    };
+    expect(() => readCurrentBackup(corruptStorage, { storeProfile: store, debts: [], receipts: [], dailyClosings: [] }))
+      .toThrow(/tutup buku.*tidak valid/i);
   });
 
   it("rejects unsupported, oversized, and partially corrupt checkpoints", () => {
     const valid = JSON.parse(buildCheckpoint({ storeProfile: store, debts: [debt], receipts: [receipt] }));
-    expect(() => parseCheckpoint(JSON.stringify({ ...valid, version: "2.0" }))).toThrow(/versi/i);
+    expect(() => parseCheckpoint(JSON.stringify({ ...valid, version: "3.0" }))).toThrow(/versi/i);
     valid.data.debts.push({ id: "corrupt" });
     expect(() => parseCheckpoint(JSON.stringify(valid))).toThrow(/tidak valid/i);
     const duplicate = JSON.parse(buildCheckpoint({ storeProfile: store, debts: [debt, debt], receipts: [receipt] }));
@@ -78,7 +109,7 @@ describe("backup and recap engine", () => {
   });
 
   it("uses fallback only for missing keys and rejects existing corrupt storage", () => {
-    const fallback = { storeProfile: store, debts: [debt], receipts: [receipt] };
+    const fallback = { storeProfile: store, debts: [debt], receipts: [receipt], dailyClosings: [] };
     const emptyStorage = { getItem: () => null };
     expect(readCurrentBackup(emptyStorage, fallback)).toEqual(fallback);
     const corruptStorage = {
