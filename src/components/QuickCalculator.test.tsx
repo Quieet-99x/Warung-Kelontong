@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import QuickCalculator from "./QuickCalculator";
@@ -40,5 +40,16 @@ describe("QuickCalculator", () => {
     await userEvent.click(screen.getByRole("button", { name: /Tambah ke Omset/i }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("status")).toHaveTextContent(/gagal disimpan/i);
+  });
+
+  it("does not steal focus when handing off to the debt modal", async () => {
+    const debtInput = document.createElement("input");
+    debtInput.setAttribute("aria-label", "Nama pelanggan kasbon");
+    document.body.append(debtInput);
+    render(<QuickCalculator onCreateDebt={() => debtInput.focus()} onAddIncome={() => true}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "52500");
+    await userEvent.click(screen.getByRole("button", { name: /Catat Jadi Kasbon/i }));
+    await waitFor(() => expect(debtInput).toHaveFocus());
   });
 });

@@ -31,9 +31,9 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome }: QuickCalc
   const change = Math.max(receivedAmount - total, 0);
   const shortfall = hasReceived && total > receivedAmount ? total - receivedAmount : 0;
 
-  const close = useCallback(() => {
+  const close = useCallback((restoreFocus = true) => {
     setOpen(false);
-    window.setTimeout(() => fabRef.current?.focus(), 0);
+    if (restoreFocus) window.setTimeout(() => fabRef.current?.focus(), 0);
   }, []);
 
   useEffect(() => {
@@ -61,7 +61,7 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome }: QuickCalc
     {status && !open && <p className="calculator-toast" role="status">{status}</p>}
     {open && <div className="calculator-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
       <section ref={panelRef} className="calculator-panel" role="dialog" aria-modal="true" aria-label="Kalkulator kasir cepat">
-        <header><div><span>KASIR CEPAT</span><h2><Calculator size={20}/> Kalkulator & Kembalian</h2></div><button type="button" aria-label="Tutup kalkulator" onClick={close}><X size={20}/></button></header>
+        <header><div><span>KASIR CEPAT</span><h2><Calculator size={20}/> Kalkulator & Kembalian</h2></div><button type="button" aria-label="Tutup kalkulator" onClick={() => close()}><X size={20}/></button></header>
         <div className="calculator-body">
           <label className="cashier-field"><span>Total belanjaan</span><input ref={inputRef} aria-label="Total belanjaan" aria-invalid={Boolean(calculation.error)} aria-describedby={calculation.error ? "cashier-expression-error" : undefined} value={expression} onChange={event => setExpression(event.target.value)} placeholder="14.000 + 26.000 + 12.500" inputMode="decimal"/><strong>{compactIDR(total)}</strong></label>
           {calculation.error && <p id="cashier-expression-error" className="calculator-error" role="alert">{calculation.error}</p>}
@@ -72,7 +72,7 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome }: QuickCalc
           </div>
           <div className={`change-card${shortfall ? " shortfall" : ""}`}><span>{!hasReceived ? "MASUKKAN UANG DITERIMA" : shortfall ? "UANG MASIH KURANG" : "UANG KEMBALIAN"}</span><strong>{compactIDR(shortfall || change)}</strong></div>
           <div className="calculator-actions"><span>AKSI CEPAT</span><div>
-            <button type="button" disabled={!total} onClick={() => { onCreateDebt(total); close(); }}><CreditCard size={17}/> Catat Jadi Kasbon</button>
+            <button type="button" disabled={!total} onClick={() => { onCreateDebt(total); close(false); }}><CreditCard size={17}/> Catat Jadi Kasbon</button>
             <button type="button" disabled={!total} onClick={() => {
               const saved = onAddIncome(total);
               setStatus(saved ? `${compactIDR(total)} ditambahkan ke omset hari ini.` : "Omset gagal disimpan di perangkat.");
