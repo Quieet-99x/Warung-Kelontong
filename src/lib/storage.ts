@@ -5,15 +5,17 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
-const isNonNegativeFiniteNumber = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value) && value >= 0;
+const isNonNegativeSafeInteger = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+const isPositiveSafeInteger = (value: unknown): value is number =>
+  typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 const isValidDateString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0 && !Number.isNaN(Date.parse(value));
 
 function isPaymentRecord(value: unknown): value is PaymentRecord {
   return isRecord(value)
     && isNonEmptyString(value.id)
-    && isNonNegativeFiniteNumber(value.amountPaid)
+    && isPositiveSafeInteger(value.amountPaid)
     && isValidDateString(value.paidAt);
 }
 
@@ -23,8 +25,8 @@ function isDebtItem(value: unknown): value is DebtItem {
     || !isNonEmptyString(value.customerName)
     || !isNonEmptyString(value.phoneNumber)
     || !isNonEmptyString(value.itemsDescription)
-    || !isNonNegativeFiniteNumber(value.totalAmount)
-    || !isNonNegativeFiniteNumber(value.remainingAmount)
+    || !isPositiveSafeInteger(value.totalAmount)
+    || !isNonNegativeSafeInteger(value.remainingAmount)
     || value.remainingAmount > value.totalAmount
     || !isNonEmptyString(value.status)
     || !debtStatuses.has(value.status as DebtStatus)
@@ -33,6 +35,10 @@ function isDebtItem(value: unknown): value is DebtItem {
     || !value.paymentHistory.every(isPaymentRecord)) return false;
 
   if (value.dueDate !== undefined && !isValidDateString(value.dueDate)) return false;
+  const paidAmount = value.paymentHistory.reduce((sum, payment) => sum + payment.amountPaid, 0);
+  if (!Number.isSafeInteger(paidAmount) || paidAmount !== value.totalAmount - value.remainingAmount) return false;
+  if (value.status === "UNPAID" && (value.remainingAmount !== value.totalAmount || value.paymentHistory.length > 0)) return false;
+  if (value.status === "PARTIAL" && (value.remainingAmount <= 0 || value.remainingAmount >= value.totalAmount || value.paymentHistory.length === 0)) return false;
   if (value.status === "PAID" && value.remainingAmount !== 0) return false;
   if (value.status !== "PAID" && value.remainingAmount === 0) return false;
   return true;

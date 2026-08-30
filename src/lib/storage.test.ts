@@ -35,6 +35,16 @@ describe("stored data validation", () => {
     expect(parseStoredDebts(JSON.stringify([validDebt, { ...validDebt, id: "broken", status: "BROKEN" }]))).toEqual([validDebt]);
   });
 
+  it.each([
+    { ...validDebt, totalAmount: 0, remainingAmount: 0, status: "PAID", paymentHistory: [] },
+    { ...validDebt, paymentHistory: [{ ...validDebt.paymentHistory[0], amountPaid: 0 }] },
+    { ...validDebt, status: "UNPAID" },
+    { ...validDebt, status: "PARTIAL", paymentHistory: [] },
+    { ...validDebt, paymentHistory: [{ ...validDebt.paymentHistory[0], amountPaid: 40000 }] },
+  ])("rejects semantically inconsistent debt %#", debt => {
+    expect(parseStoredDebts(JSON.stringify([debt]))).toBeNull();
+  });
+
   it("accepts a valid store profile", () => {
     expect(parseStoredStore('{"storeName":"Warung A","ownerName":"Rina","paymentInfo":"QRIS"}')).toEqual({
       storeName: "Warung A",
