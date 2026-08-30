@@ -20,25 +20,25 @@ describe("Gemini receipt extraction", () => {
     expect(request.config.temperature).toBe(0.1);
   });
 
-  it("retries transient Gemini failures before succeeding", async () => {
+  it("fails over immediately when the primary model is unavailable", async () => {
     const generateContent = vi.fn()
       .mockRejectedValueOnce(Object.assign(new Error("high demand"), { status: 503 }))
       .mockResolvedValue({ text: JSON.stringify(result) });
     await expect(extractReceiptWithGemini(image, { generateContent }, ["gemini-3.7-flash", "gemini-3.6-flash"], async () => {})).resolves.toMatchObject(result);
     expect(generateContent).toHaveBeenCalledTimes(2);
-    expect(generateContent.mock.calls[1][0].model).toBe("gemini-3.7-flash");
+    expect(generateContent.mock.calls[0][0].model).toBe("gemini-3.7-flash");
+    expect(generateContent.mock.calls[1][0].model).toBe("gemini-3.6-flash");
   });
 
-  it("falls back after the primary model stays unavailable", async () => {
+  it("retries the fallback model once for a transient failure", async () => {
     const unavailable = Object.assign(new Error("high demand"), { status: 503 });
     const generateContent = vi.fn()
       .mockRejectedValueOnce(unavailable)
       .mockRejectedValueOnce(unavailable)
-      .mockRejectedValueOnce(unavailable)
       .mockResolvedValue({ text: JSON.stringify(result) });
     await expect(extractReceiptWithGemini(image, { generateContent }, ["gemini-3.7-flash", "gemini-3.6-flash"], async () => {})).resolves.toMatchObject(result);
-    expect(generateContent).toHaveBeenCalledTimes(4);
-    expect(generateContent.mock.calls[3][0].model).toBe("gemini-3.6-flash");
+    expect(generateContent).toHaveBeenCalledTimes(3);
+    expect(generateContent.mock.calls[2][0].model).toBe("gemini-3.6-flash");
   });
 
   it("rejects malformed model output", async () => {

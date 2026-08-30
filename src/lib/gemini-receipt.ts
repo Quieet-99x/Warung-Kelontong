@@ -53,13 +53,14 @@ export async function extractReceiptWithGemini(
   const modelCandidates = Array.isArray(model) ? model : [model];
   let response: { text?: string } | undefined;
   let lastError: unknown;
-  for (const candidate of modelCandidates) {
+  for (const [modelIndex, candidate] of modelCandidates.entries()) {
     const request = {
       model: candidate,
       contents: [{ role: "user" as const, parts: [{ inlineData: image }, { text: prompt }] }],
       config: { temperature: 0.1, responseMimeType: "application/json", responseSchema },
     };
-    for (let attempt = 0; attempt < 3; attempt += 1) {
+    const maxAttempts = modelIndex === 0 && modelCandidates.length > 1 ? 1 : 2;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
       try {
         response = await models.generateContent(request);
         break;
@@ -67,7 +68,7 @@ export async function extractReceiptWithGemini(
         lastError = error;
         const status = typeof error === "object" && error !== null && "status" in error ? Number(error.status) : 0;
         if (![429, 503, 504].includes(status)) throw error;
-        if (attempt < 2) await sleep(400 * 2 ** attempt + Math.floor(Math.random() * 150));
+        if (attempt < maxAttempts - 1) await sleep(400 * 2 ** attempt + Math.floor(Math.random() * 150));
       }
     }
     if (response) break;
