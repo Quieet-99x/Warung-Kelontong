@@ -35,8 +35,9 @@ export async function POST(request: Request) {
     }
     const image = parseScanRequest(body);
     const ai = new GoogleGenAI({ apiKey });
-    const model = process.env.GEMINI_MODEL || "gemini-3.7-flash";
-    const receipt = await extractReceiptWithGemini(image, ai.models, model);
+    const primaryModel = process.env.GEMINI_MODEL || "gemini-3.7-flash";
+    const models = primaryModel === "gemini-3.6-flash" ? [primaryModel] : [primaryModel, "gemini-3.6-flash"];
+    const receipt = await extractReceiptWithGemini(image, ai.models, models);
     return Response.json({ receipt });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Gagal membaca struk";

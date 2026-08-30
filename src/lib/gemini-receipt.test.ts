@@ -24,8 +24,21 @@ describe("Gemini receipt extraction", () => {
     const generateContent = vi.fn()
       .mockRejectedValueOnce(Object.assign(new Error("high demand"), { status: 503 }))
       .mockResolvedValue({ text: JSON.stringify(result) });
-    await expect(extractReceiptWithGemini(image, { generateContent }, "gemini-3.7-flash", async () => {})).resolves.toMatchObject(result);
+    await expect(extractReceiptWithGemini(image, { generateContent }, ["gemini-3.7-flash", "gemini-3.6-flash"], async () => {})).resolves.toMatchObject(result);
     expect(generateContent).toHaveBeenCalledTimes(2);
+    expect(generateContent.mock.calls[1][0].model).toBe("gemini-3.7-flash");
+  });
+
+  it("falls back after the primary model stays unavailable", async () => {
+    const unavailable = Object.assign(new Error("high demand"), { status: 503 });
+    const generateContent = vi.fn()
+      .mockRejectedValueOnce(unavailable)
+      .mockRejectedValueOnce(unavailable)
+      .mockRejectedValueOnce(unavailable)
+      .mockResolvedValue({ text: JSON.stringify(result) });
+    await expect(extractReceiptWithGemini(image, { generateContent }, ["gemini-3.7-flash", "gemini-3.6-flash"], async () => {})).resolves.toMatchObject(result);
+    expect(generateContent).toHaveBeenCalledTimes(4);
+    expect(generateContent.mock.calls[3][0].model).toBe("gemini-3.6-flash");
   });
 
   it("rejects malformed model output", async () => {
