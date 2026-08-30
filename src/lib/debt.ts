@@ -1,6 +1,6 @@
 import type { DebtItem } from "@/types";
 
-function assertValidAmount(amount: number): void {
+export function assertValidAmount(amount: number): void {
   if (!Number.isSafeInteger(amount) || amount <= 0) {
     throw new Error("Nominal harus berupa angka lebih dari nol");
   }
