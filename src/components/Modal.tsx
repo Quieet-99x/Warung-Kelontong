@@ -1,0 +1,3 @@
+"use client";
+import {X} from "lucide-react"; import type {ReactNode} from "react";
+export function Modal({open,onClose,title,subtitle,children}:{open:boolean;onClose:()=>void;title:string;subtitle?:string;children:ReactNode}){ if(!open)return null; return <div className="modal-backdrop" role="presentation" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}><section className="modal" role="dialog" aria-modal="true" aria-label={title}><header className="modal-header"><div><h2>{title}</h2>{subtitle&&<p>{subtitle}</p>}</div><button className="icon-button" onClick={onClose} aria-label="Tutup"><X size={20}/></button></header>{children}</section></div> }

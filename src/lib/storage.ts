@@ -1,0 +1,67 @@
+import type { DebtItem, DebtStatus, PaymentRecord, StoreProfile } from "@/types";
+
+const debtStatuses = new Set<DebtStatus>(["UNPAID", "PARTIAL", "PAID"]);
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
+const isNonNegativeFiniteNumber = (value: unknown): value is number =>
+  typeof value === "number" && Number.isFinite(value) && value >= 0;
+const isValidDateString = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0 && !Number.isNaN(Date.parse(value));
+
+function isPaymentRecord(value: unknown): value is PaymentRecord {
+  return isRecord(value)
+    && isNonEmptyString(value.id)
+    && isNonNegativeFiniteNumber(value.amountPaid)
+    && isValidDateString(value.paidAt);
+}
+
+function isDebtItem(value: unknown): value is DebtItem {
+  if (!isRecord(value)) return false;
+  if (!isNonEmptyString(value.id)
+    || !isNonEmptyString(value.customerName)
+    || !isNonEmptyString(value.phoneNumber)
+    || !isNonEmptyString(value.itemsDescription)
+    || !isNonNegativeFiniteNumber(value.totalAmount)
+    || !isNonNegativeFiniteNumber(value.remainingAmount)
+    || value.remainingAmount > value.totalAmount
+    || !isNonEmptyString(value.status)
+    || !debtStatuses.has(value.status as DebtStatus)
+    || !isValidDateString(value.createdAt)
+    || !Array.isArray(value.paymentHistory)
+    || !value.paymentHistory.every(isPaymentRecord)) return false;
+
+  if (value.dueDate !== undefined && !isValidDateString(value.dueDate)) return false;
+  if (value.status === "PAID" && value.remainingAmount !== 0) return false;
+  if (value.status !== "PAID" && value.remainingAmount === 0) return false;
+  return true;
+}
+
+export function parseStoredDebts(raw: string): DebtItem[] | null {
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!Array.isArray(value)) return null;
+    const validDebts = value.filter(isDebtItem);
+    return value.length === 0 || validDebts.length > 0 ? validDebts : null;
+  } catch {
+    return null;
+  }
+}
+
+export function parseStoredStore(raw: string): StoreProfile | null {
+  try {
+    const value: unknown = JSON.parse(raw);
+    if (!isRecord(value)
+      || !isNonEmptyString(value.storeName)
+      || !isNonEmptyString(value.ownerName)
+      || (value.paymentInfo !== undefined && typeof value.paymentInfo !== "string")) return null;
+    return {
+      storeName: value.storeName,
+      ownerName: value.ownerName,
+      paymentInfo: value.paymentInfo as string | undefined,
+    };
+  } catch {
+    return null;
+  }
+}
