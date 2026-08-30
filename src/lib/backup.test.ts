@@ -120,6 +120,8 @@ describe("backup and recap engine", () => {
       getItem: (key: string) => key === STORAGE_KEYS.debts ? JSON.stringify([debt, { id: "corrupt" }]) : null,
     };
     expect(() => readCurrentBackup(partiallyCorruptStorage, fallback)).toThrow(/kasbon.*tidak valid/i);
+    const emptyExistingStorage = { getItem: (key: string) => key === STORAGE_KEYS.debts ? "" : null };
+    expect(() => readCurrentBackup(emptyExistingStorage, fallback)).toThrow(/kasbon.*tidak valid/i);
   });
 
   it("restores all keys atomically and rolls back when a write fails", () => {
@@ -157,6 +159,24 @@ describe("backup and recap engine", () => {
           throw new Error("restore failed");
         }
         if (failedRestore && key === STORAGE_KEYS.store && value === "old-store") throw new Error("rollback failed");
+        values.set(key, value);
+      },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    expect(() => restoreCheckpoint(storage, { storeProfile: store, debts: [debt], receipts: [receipt] }))
+      .toThrow(/mungkin tidak konsisten/i);
+  });
+
+  it("warns that storage may be inconsistent when rollback read-back throws", () => {
+    let failedRestore = false;
+    const values = new Map<string, string>([[STORAGE_KEYS.store, "old-store"]]);
+    const storage = {
+      getItem: (key: string) => {
+        if (failedRestore) throw new Error("security");
+        return values.get(key) ?? null;
+      },
+      setItem: (key: string, value: string) => {
+        if (key === STORAGE_KEYS.debts) { failedRestore = true; throw new Error("write"); }
         values.set(key, value);
       },
       removeItem: (key: string) => { values.delete(key); },

@@ -33,4 +33,17 @@ describe("daily closing mutations", () => {
     const ignoring = { getItem: () => null, setItem: () => undefined };
     expect(writeDailyClosings(ignoring, [])).toBe(false);
   });
+
+  it("rejects malformed dates, IDs, metrics, and oversized notes", () => {
+    const base = {
+      date: "2026-08-30", cashInDrawer: 100_000, manualIncome: 80_000,
+      notes: "Normal", metrics, id: "id-1", closedAt: "2026-08-30T21:00:00.000Z",
+    };
+    expect(() => closeBooksForDate([], { ...base, date: "2026-02-30" })).toThrow(/tidak valid/i);
+    expect(() => closeBooksForDate([], { ...base, id: " " })).toThrow(/tidak valid/i);
+    expect(() => closeBooksForDate([], { ...base, closedAt: "yesterday" })).toThrow(/tidak valid/i);
+    expect(() => closeBooksForDate([], { ...base, closedAt: "2026" })).toThrow(/tidak valid/i);
+    expect(() => closeBooksForDate([], { ...base, metrics: { ...metrics, paidDebtsToday: -1 } })).toThrow(/tidak valid/i);
+    expect(() => closeBooksForDate([], { ...base, notes: "x".repeat(1001) })).toThrow(/terlalu panjang/i);
+  });
 });

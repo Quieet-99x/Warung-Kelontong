@@ -16,9 +16,35 @@ const assertAmount = (amount: number) => {
   if (!Number.isSafeInteger(amount) || amount < 0) throw new Error("Nominal buku kas tidak valid.");
 };
 
+const assertDate = (value: string) => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) throw new Error("Tanggal buku kas tidak valid.");
+  const [, year, month, day] = match.map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    throw new Error("Tanggal buku kas tidak valid.");
+  }
+};
+
+const assertMetrics = (metrics: DailyMetrics) => {
+  assertAmount(metrics.paidDebtsToday);
+  assertAmount(metrics.totalExpenseToday);
+  assertAmount(metrics.newDebtsToday);
+};
+
+const isISOString = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(value)) return false;
+  const timestamp = Date.parse(value);
+  return !Number.isNaN(timestamp) && new Date(timestamp).toISOString() === (value.includes(".") ? value : value.replace("Z", ".000Z"));
+};
+
 const buildRecord = (input: CloseBooksInput, existing?: DailyClosingRecord): DailyClosingRecord => {
+  assertDate(input.date);
+  if (!input.id.trim() || !isISOString(input.closedAt)) throw new Error("Identitas buku kas tidak valid.");
+  if (input.notes && input.notes.length > 1000) throw new Error("Catatan buku kas terlalu panjang.");
   assertAmount(input.cashInDrawer);
   assertAmount(input.manualIncome);
+  assertMetrics(input.metrics);
   const netCashflow = input.manualIncome + input.metrics.paidDebtsToday - input.metrics.totalExpenseToday;
   if (!Number.isSafeInteger(netCashflow)) throw new Error("Perhitungan arus kas melebihi batas aman.");
   return {

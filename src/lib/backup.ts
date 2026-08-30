@@ -169,7 +169,12 @@ export function restoreCheckpoint(storage: StorageLike, data: BackupData): void 
         // Best effort rollback: preserve as much prior data as the browser permits.
       }
     }
-    const rollbackVerified = [...previous].every(([key, value]) => storage.getItem(key) === value);
+    let rollbackVerified = false;
+    try {
+      rollbackVerified = [...previous].every(([key, value]) => storage.getItem(key) === value);
+    } catch {
+      rollbackVerified = false;
+    }
     if (!rollbackVerified) {
       throw new Error("Gagal memulihkan checkpoint dan penyimpanan mungkin tidak konsisten. Jangan tutup aplikasi sebelum membuat salinan data yang masih terlihat.");
     }
@@ -185,11 +190,11 @@ export function readCurrentBackup(
   const debtsRaw = storage.getItem(STORAGE_KEYS.debts);
   const receiptsRaw = storage.getItem(STORAGE_KEYS.receipts);
   const closingsRaw = storage.getItem(STORAGE_KEYS.dailyClosings);
-  const storeProfile = storeRaw ? parseStoredStore(storeRaw) : fallback?.storeProfile ?? null;
+  const storeProfile = storeRaw !== null ? parseStoredStore(storeRaw) : fallback?.storeProfile ?? null;
   let debts = fallback?.debts ?? [];
   let receipts = fallback?.receipts ?? [];
   let dailyClosings = fallback?.dailyClosings ?? [];
-  if (debtsRaw) {
+  if (debtsRaw !== null) {
     try {
       const source: unknown = JSON.parse(debtsRaw);
       debts = parseAllDebts(source) ?? [];
@@ -198,7 +203,7 @@ export function readCurrentBackup(
       throw new Error("Data kasbon saat ini tidak valid dan belum dapat dicadangkan.");
     }
   }
-  if (receiptsRaw) {
+  if (receiptsRaw !== null) {
     try {
       const source: unknown = JSON.parse(receiptsRaw);
       receipts = parseAllReceipts(source) ?? [];
@@ -207,7 +212,7 @@ export function readCurrentBackup(
       throw new Error("Data kulakan saat ini tidak valid dan belum dapat dicadangkan.");
     }
   }
-  if (closingsRaw) {
+  if (closingsRaw !== null) {
     try {
       const source: unknown = JSON.parse(closingsRaw);
       dailyClosings = parseAllDailyClosings(source) ?? [];

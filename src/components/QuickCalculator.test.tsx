@@ -1,0 +1,44 @@
+import { cleanup, render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import QuickCalculator from "./QuickCalculator";
+
+describe("QuickCalculator", () => {
+  beforeEach(cleanup);
+  it("shows an inline error for invalid expressions and disables actions", async () => {
+    render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => true}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "1/3");
+    expect(screen.getByRole("alert")).toHaveTextContent(/tidak valid/i);
+    expect(screen.getByRole("button", { name: /Catat Jadi Kasbon/i })).toBeDisabled();
+  });
+
+  it("closes on Escape and restores focus to the floating button", async () => {
+    render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => true}/>);
+    const fab = screen.getByRole("button", { name: /Buka kalkulator kasir/i });
+    await userEvent.click(fab);
+    expect(screen.getByRole("textbox", { name: /Total belanjaan/i })).toHaveFocus();
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(fab).toHaveFocus();
+  });
+
+  it("keeps a visible success status after adding omzet", async () => {
+    const onAddIncome = vi.fn(() => true);
+    render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={onAddIncome}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "52500");
+    await userEvent.click(screen.getByRole("button", { name: /Tambah ke Omset/i }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent(/Rp52.500.*ditambahkan/i);
+  });
+
+  it("shows a failed storage status inside the open dialog", async () => {
+    render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => false}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "52500");
+    await userEvent.click(screen.getByRole("button", { name: /Tambah ke Omset/i }));
+    const dialog = screen.getByRole("dialog");
+    expect(within(dialog).getByRole("status")).toHaveTextContent(/gagal disimpan/i);
+  });
+});

@@ -1,7 +1,7 @@
 "use client";
 
 import { Calculator, CreditCard, PlusCircle, X } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { evaluateCashierExpression } from "@/lib/cashflow";
 import { formatIDR, parseIDRInput } from "@/lib/utils";
 
@@ -17,24 +17,54 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome }: QuickCalc
   const [expression, setExpression] = useState("");
   const [received, setReceived] = useState("");
   const [status, setStatus] = useState("");
-  const total = useMemo(() => {
-    try { return evaluateCashierExpression(expression); } catch { return 0; }
+  const fabRef = useRef<HTMLButtonElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const calculation = useMemo(() => {
+    if (!expression.trim()) return { total: 0, error: "" };
+    try { return { total: evaluateCashierExpression(expression), error: "" }; }
+    catch { return { total: 0, error: "Ekspresi total belanjaan tidak valid." }; }
   }, [expression]);
+  const total = calculation.total;
   const receivedAmount = parseIDRInput(received);
   const hasReceived = received.trim().length > 0;
   const change = Math.max(receivedAmount - total, 0);
   const shortfall = hasReceived && total > receivedAmount ? total - receivedAmount : 0;
 
+  const close = useCallback(() => {
+    setOpen(false);
+    window.setTimeout(() => fabRef.current?.focus(), 0);
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    inputRef.current?.focus();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") { event.preventDefault(); close(); return; }
+      if (event.key !== "Tab" || !panelRef.current) return;
+      const focusable = [...panelRef.current.querySelectorAll<HTMLElement>("button:not([disabled]), input:not([disabled])")];
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [close, open]);
+
   const setQuickCash = (extra: number) => setReceived(String(total + extra));
-  const resetAndClose = () => { setOpen(false); setStatus(""); };
+  const openCalculator = () => { setStatus(""); setOpen(true); };
 
   return <>
-    <button className="calculator-fab" type="button" aria-label="Buka kalkulator kasir" onClick={() => setOpen(true)}><Calculator size={23}/></button>
-    {open && <div className="calculator-backdrop" role="presentation">
-      <section className="calculator-panel" role="dialog" aria-modal="true" aria-label="Kalkulator kasir cepat">
-        <header><div><span>KASIR CEPAT</span><h2><Calculator size={20}/> Kalkulator & Kembalian</h2></div><button type="button" aria-label="Tutup kalkulator" onClick={resetAndClose}><X size={20}/></button></header>
+    <button ref={fabRef} className="calculator-fab" type="button" aria-label="Buka kalkulator kasir" onClick={openCalculator}><Calculator size={23}/></button>
+    {status && !open && <p className="calculator-toast" role="status">{status}</p>}
+    {open && <div className="calculator-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
+      <section ref={panelRef} className="calculator-panel" role="dialog" aria-modal="true" aria-label="Kalkulator kasir cepat">
+        <header><div><span>KASIR CEPAT</span><h2><Calculator size={20}/> Kalkulator & Kembalian</h2></div><button type="button" aria-label="Tutup kalkulator" onClick={close}><X size={20}/></button></header>
         <div className="calculator-body">
-          <label className="cashier-field"><span>Total belanjaan</span><input aria-label="Total belanjaan" value={expression} onChange={event => setExpression(event.target.value)} placeholder="14.000 + 26.000 + 12.500" inputMode="decimal"/><strong>{compactIDR(total)}</strong></label>
+          <label className="cashier-field"><span>Total belanjaan</span><input ref={inputRef} aria-label="Total belanjaan" aria-invalid={Boolean(calculation.error)} aria-describedby={calculation.error ? "cashier-expression-error" : undefined} value={expression} onChange={event => setExpression(event.target.value)} placeholder="14.000 + 26.000 + 12.500" inputMode="decimal"/><strong>{compactIDR(total)}</strong></label>
+          {calculation.error && <p id="cashier-expression-error" className="calculator-error" role="alert">{calculation.error}</p>}
           <label className="cashier-field"><span>Uang diterima pembeli</span><input aria-label="Uang diterima pembeli" value={received} onChange={event => setReceived(event.target.value)} placeholder="Rp 100.000" inputMode="numeric"/></label>
           <div className="cash-shortcuts" aria-label="Pilihan uang cepat">
             <button type="button" onClick={() => setQuickCash(0)} disabled={!total}>Pas</button>
@@ -42,11 +72,11 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome }: QuickCalc
           </div>
           <div className={`change-card${shortfall ? " shortfall" : ""}`}><span>{!hasReceived ? "MASUKKAN UANG DITERIMA" : shortfall ? "UANG MASIH KURANG" : "UANG KEMBALIAN"}</span><strong>{compactIDR(shortfall || change)}</strong></div>
           <div className="calculator-actions"><span>AKSI CEPAT</span><div>
-            <button type="button" disabled={!total} onClick={() => { onCreateDebt(total); resetAndClose(); }}><CreditCard size={17}/> Catat Jadi Kasbon</button>
+            <button type="button" disabled={!total} onClick={() => { onCreateDebt(total); close(); }}><CreditCard size={17}/> Catat Jadi Kasbon</button>
             <button type="button" disabled={!total} onClick={() => {
               const saved = onAddIncome(total);
               setStatus(saved ? `${compactIDR(total)} ditambahkan ke omset hari ini.` : "Omset gagal disimpan di perangkat.");
-              if (saved) { setExpression(""); setOpen(false); }
+              if (saved) { setExpression(""); close(); }
             }}><PlusCircle size={17}/> Tambah ke Omset Hari Ini</button>
           </div></div>
           {status && <p className="calculator-status" role="status">{status}</p>}
