@@ -15,6 +15,13 @@ describe("Dashboard forms", () => {
     const amount = screen.getByRole("spinbutton", { name: "Total kasbon" });
     expect(amount).toHaveAttribute("min", "1");
     expect(amount).toHaveAttribute("step", "1");
+    const phone = screen.getByRole("textbox", { name: "Nomor WhatsApp" });
+    expect(phone).toHaveAttribute("pattern");
+    await userEvent.type(phone, "+62 812-3456-7890");
+    expect(phone).toBeValid();
+    await userEvent.clear(phone);
+    await userEvent.type(phone, "08----------12");
+    expect(phone).toBeInvalid();
   });
 
   it("does not overwrite corrupt stored data during initial hydration", async () => {

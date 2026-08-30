@@ -15,4 +15,8 @@ describe("debt domain", () => {
   it.each([Number.NaN, Number.POSITIVE_INFINITY])("rejects invalid added amount %s", amount => {
     expect(() => addAmountToDebt(debt, amount)).toThrow();
   });
+  it("rejects additions that overflow the safe integer range", () => {
+    const hugeDebt = { ...debt, totalAmount: Number.MAX_SAFE_INTEGER, remainingAmount: Number.MAX_SAFE_INTEGER };
+    expect(() => addAmountToDebt(hugeDebt, 1)).toThrow();
+  });
 });

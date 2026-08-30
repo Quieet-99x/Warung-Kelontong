@@ -1,17 +1,22 @@
 import type { DebtItem } from "@/types";
 
 function assertValidAmount(amount: number): void {
-  if (!Number.isFinite(amount) || amount <= 0) {
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
     throw new Error("Nominal harus berupa angka lebih dari nol");
   }
 }
 
 export function addAmountToDebt(debt: DebtItem, amount: number, description?: string): DebtItem {
   assertValidAmount(amount);
+  const totalAmount = debt.totalAmount + amount;
+  const remainingAmount = debt.remainingAmount + amount;
+  if (!Number.isSafeInteger(totalAmount) || !Number.isSafeInteger(remainingAmount)) {
+    throw new Error("Nominal kasbon terlalu besar");
+  }
   return {
     ...debt,
-    totalAmount: debt.totalAmount + amount,
-    remainingAmount: debt.remainingAmount + amount,
+    totalAmount,
+    remainingAmount,
     status: debt.status === "PAID" ? "PARTIAL" : debt.status,
     itemsDescription: description ? `${debt.itemsDescription}; ${description}` : debt.itemsDescription,
   };
