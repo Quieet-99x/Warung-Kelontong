@@ -1,2 +1,2 @@
-import Dashboard from "@/components/Dashboard";
-export default function Home(){return <Dashboard/>}
+import WarungApp from "@/components/WarungApp";
+export default function Home(){return <WarungApp/>}
