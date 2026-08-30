@@ -22,7 +22,7 @@ describe("BackupModal", () => {
   });
 
   it("shows monthly recap and checkpoint actions", () => {
-    render(<BackupModal open onClose={() => {}} storeProfile={storeProfile} debts={[debt]} />);
+    render(<BackupModal open onClose={() => {}} storeProfile={storeProfile} debts={[debt]} onRestored={() => {}} />);
     expect(screen.getByRole("heading", { name: "Pusat Data & Cadangan" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Download Rekap Excel/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Download Checkpoint/i })).toBeInTheDocument();
@@ -36,14 +36,15 @@ describe("BackupModal", () => {
       buildCheckpoint({ storeProfile, debts: [debt], receipts: [receipt] }, "2026-08-30T12:00:00.000Z"),
     ], "backup.json", { type: "application/json" });
     await userEvent.upload(screen.getByLabelText(/Pilih file checkpoint/i), file);
-    await waitFor(() => expect(screen.getByText(/1 kasbon dan 1 struk/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText(/Cadangan.*Warung Makmur/i)).toBeInTheDocument());
+    expect(screen.getByText(/1 kasbon · 1 struk/i)).toBeInTheDocument();
     expect(onRestored).not.toHaveBeenCalled();
     await userEvent.click(screen.getByRole("button", { name: /Ya, Pulihkan Data/i }));
     expect(onRestored).toHaveBeenCalledOnce();
   });
 
   it("rejects an invalid checkpoint without showing the destructive confirmation", async () => {
-    render(<BackupModal open onClose={() => {}} storeProfile={storeProfile} debts={[]} />);
+    render(<BackupModal open onClose={() => {}} storeProfile={storeProfile} debts={[]} onRestored={() => {}} />);
     await userEvent.upload(screen.getByLabelText(/Pilih file checkpoint/i), new File(["{}"], "bad.json", { type: "application/json" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(/gagal membaca checkpoint/i);
     expect(screen.queryByRole("button", { name: /Ya, Pulihkan Data/i })).not.toBeInTheDocument();

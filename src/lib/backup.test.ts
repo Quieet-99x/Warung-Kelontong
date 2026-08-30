@@ -36,6 +36,8 @@ describe("backup and recap engine", () => {
     expect(csv).toContain("Total Kasbon Dicatat,50000");
     expect(csv).toContain("Total Pengeluaran Kulakan,30000");
     expect(csv).not.toContain("Juli");
+    const controlFormula = buildMonthlyCSV("2026-08", [{ ...debt, itemsDescription: "\ufeff=1+1" }], []);
+    expect(controlFormula).toContain('"\'\ufeff=1+1"');
   });
 
   it("round-trips a versioned checkpoint through strict validation", () => {
@@ -55,6 +57,24 @@ describe("backup and recap engine", () => {
     const duplicate = JSON.parse(buildCheckpoint({ storeProfile: store, debts: [debt, debt], receipts: [receipt] }));
     expect(() => parseCheckpoint(JSON.stringify(duplicate))).toThrow(/tidak valid/i);
     expect(() => parseCheckpoint("x".repeat(5_000_001))).toThrow(/terlalu besar/i);
+    expect(() => buildCheckpoint({
+      storeProfile: store,
+      debts: [debt],
+      receipts: [{ ...receipt, rawImageUrl: "x".repeat(5_000_000) }],
+    })).toThrow(/terlalu besar/i);
+  });
+
+  it("rejects duplicate payment IDs", () => {
+    const paid = {
+      ...debt,
+      status: "PAID" as const,
+      remainingAmount: 0,
+      paymentHistory: [
+        { id: "payment-1", amountPaid: 25000, paidAt: "2026-08-20T10:00:00.000Z" },
+        { id: "payment-1", amountPaid: 25000, paidAt: "2026-08-21T10:00:00.000Z" },
+      ],
+    };
+    expect(() => parseCheckpoint(buildCheckpoint({ storeProfile: store, debts: [paid], receipts: [] }))).toThrow(/tidak valid/i);
   });
 
   it("uses fallback only for missing keys and rejects existing corrupt storage", () => {
@@ -86,6 +106,52 @@ describe("backup and recap engine", () => {
       removeItem: (key: string) => { values.delete(key); },
     };
     expect(() => restoreCheckpoint(storage, { storeProfile: store, debts: [debt], receipts: [receipt] })).toThrow(/gagal/i);
+    expect(Object.fromEntries(values)).toEqual({
+      [STORAGE_KEYS.store]: "old-store",
+      [STORAGE_KEYS.debts]: "old-debts",
+      [STORAGE_KEYS.receipts]: "old-receipts",
+    });
+  });
+
+  it("warns that storage may be inconsistent when rollback also fails", () => {
+    const values = new Map<string, string>([
+      [STORAGE_KEYS.store, "old-store"], [STORAGE_KEYS.debts, "old-debts"], [STORAGE_KEYS.receipts, "old-receipts"],
+    ]);
+    let failedRestore = false;
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        if (key === STORAGE_KEYS.debts && !failedRestore) {
+          failedRestore = true;
+          throw new Error("restore failed");
+        }
+        if (failedRestore && key === STORAGE_KEYS.store && value === "old-store") throw new Error("rollback failed");
+        values.set(key, value);
+      },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    expect(() => restoreCheckpoint(storage, { storeProfile: store, debts: [debt], receipts: [receipt] }))
+      .toThrow(/mungkin tidak konsisten/i);
+  });
+
+  it("rolls back when storage silently ignores a checkpoint write", () => {
+    const values = new Map<string, string>([
+      [STORAGE_KEYS.store, "old-store"], [STORAGE_KEYS.debts, "old-debts"], [STORAGE_KEYS.receipts, "old-receipts"],
+    ]);
+    let ignoreReceipt = true;
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => {
+        if (key === STORAGE_KEYS.receipts && ignoreReceipt) {
+          ignoreReceipt = false;
+          return;
+        }
+        values.set(key, value);
+      },
+      removeItem: (key: string) => { values.delete(key); },
+    };
+    expect(() => restoreCheckpoint(storage, { storeProfile: store, debts: [debt], receipts: [receipt] }))
+      .toThrow(/berhasil dipertahankan/i);
     expect(Object.fromEntries(values)).toEqual({
       [STORAGE_KEYS.store]: "old-store",
       [STORAGE_KEYS.debts]: "old-debts",

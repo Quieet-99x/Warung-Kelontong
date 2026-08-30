@@ -33,7 +33,8 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 function spreadsheetSafe(value: string): string {
-  return /^[\s]*[=+\-@]/.test(value) ? `'${value}` : value;
+  const effectiveStart = value.replace(/^[\s\u0000-\u001f\u007f-\u009f\ufeff\u200b-\u200f\u202a-\u202e\u2060-\u206f]*/u, "");
+  return /^[=+\-@]/.test(effectiveStart) ? `'${value}` : value;
 }
 
 function csvCell(value: string | number): string {
@@ -77,7 +78,11 @@ export function buildMonthlyCSV(monthYear: string, debts: DebtItem[], receipts: 
 }
 
 export function buildCheckpoint(data: BackupData, backupDate = new Date().toISOString()): string {
-  return JSON.stringify({ version: "1.0", backupDate, data } satisfies Checkpoint, null, 2);
+  const checkpoint = JSON.stringify({ version: "1.0", backupDate, data } satisfies Checkpoint, null, 2);
+  if (new TextEncoder().encode(checkpoint).byteLength > MAX_CHECKPOINT_BYTES) {
+    throw new Error("File checkpoint terlalu besar untuk dicadangkan.");
+  }
+  return checkpoint;
 }
 
 const hasUniqueIds = (ids: string[]) => new Set(ids).size === ids.length;
@@ -85,7 +90,9 @@ const hasUniqueIds = (ids: string[]) => new Set(ids).size === ids.length;
 function parseAllDebts(value: unknown): DebtItem[] | null {
   if (!Array.isArray(value)) return null;
   const parsed = parseStoredDebts(JSON.stringify(value));
-  return parsed && parsed.length === value.length && hasUniqueIds(parsed.map(debt => debt.id)) ? parsed : null;
+  if (!parsed || parsed.length !== value.length || !hasUniqueIds(parsed.map(debt => debt.id))) return null;
+  const paymentIds = parsed.flatMap(debt => debt.paymentHistory.map(payment => payment.id));
+  return hasUniqueIds(paymentIds) ? parsed : null;
 }
 
 function parseAllReceipts(value: unknown): PurchaseReceipt[] | null {
@@ -134,6 +141,8 @@ export function restoreCheckpoint(storage: StorageLike, data: BackupData): void 
   for (const key of next.keys()) previous.set(key, storage.getItem(key));
   try {
     for (const [key, value] of next) storage.setItem(key, value);
+    const writeVerified = [...next].every(([key, value]) => storage.getItem(key) === value);
+    if (!writeVerified) throw new Error("Checkpoint tidak tersimpan lengkap.");
   } catch {
     for (const [key, value] of previous) {
       try {
@@ -143,7 +152,11 @@ export function restoreCheckpoint(storage: StorageLike, data: BackupData): void 
         // Best effort rollback: preserve as much prior data as the browser permits.
       }
     }
-    throw new Error("Gagal memulihkan checkpoint. Data sebelumnya dipertahankan.");
+    const rollbackVerified = [...previous].every(([key, value]) => storage.getItem(key) === value);
+    if (!rollbackVerified) {
+      throw new Error("Gagal memulihkan checkpoint dan penyimpanan mungkin tidak konsisten. Jangan tutup aplikasi sebelum membuat salinan data yang masih terlihat.");
+    }
+    throw new Error("Gagal memulihkan checkpoint. Data sebelumnya berhasil dipertahankan.");
   }
 }
 

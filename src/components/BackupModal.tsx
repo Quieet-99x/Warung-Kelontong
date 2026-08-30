@@ -13,7 +13,6 @@ import {
   readCurrentBackup,
   restoreCheckpoint,
 } from "@/lib/backup";
-import { parseStoredPurchases } from "@/lib/purchase-storage";
 import { Modal } from "./Modal";
 
 interface BackupModalProps {
@@ -21,22 +20,15 @@ interface BackupModalProps {
   onClose: () => void;
   storeProfile: StoreProfile;
   debts: DebtItem[];
-  onRestored?: () => void;
+  onRestored: () => void;
 }
 
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 
-function getReceipts() {
-  const raw = localStorage.getItem("buku-kasbon.purchases.v1");
-  if (!raw) return [];
-  const receipts = parseStoredPurchases(raw);
-  if (!receipts) throw new Error("Data kulakan saat ini tidak valid.");
-  return receipts;
-}
-
 export default function BackupModal({ open, onClose, storeProfile, debts, onRestored }: BackupModalProps) {
   const [month, setMonth] = useState(currentMonth);
   const [checkpoint, setCheckpoint] = useState<Checkpoint | null>(null);
+  const [currentCounts, setCurrentCounts] = useState<{ debts: number; receipts: number } | null>(null);
   const [status, setStatus] = useState<{ kind: "error" | "success"; message: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const backupDate = useMemo(() => checkpoint ? new Intl.DateTimeFormat("id-ID", {
@@ -45,7 +37,8 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
 
   const downloadCSV = () => {
     try {
-      const csv = buildMonthlyCSV(month, debts, getReceipts());
+      const data = readCurrentBackup(localStorage, { storeProfile, debts, receipts: [] });
+      const csv = buildMonthlyCSV(month, data.debts, data.receipts);
       downloadTextFile(csv, "text/csv;charset=utf-8", `Rekap_Warung_${month}.csv`);
       setStatus({ kind: "success", message: `Rekap ${month} berhasil disiapkan.` });
     } catch (reason) {
@@ -55,7 +48,7 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
 
   const downloadCheckpoint = () => {
     try {
-      const fallback = { storeProfile, debts, receipts: getReceipts() };
+      const fallback = { storeProfile, debts, receipts: [] };
       const data = readCurrentBackup(localStorage, fallback);
       const date = new Date().toISOString().slice(0, 10);
       downloadTextFile(buildCheckpoint(data), "application/json;charset=utf-8", `Checkpoint_Warung_${date}.json`);
@@ -67,12 +60,19 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
 
   const selectFile = async (file?: File) => {
     setCheckpoint(null);
+    setCurrentCounts(null);
     setStatus(null);
     if (!file) return;
     try {
       if (file.size > MAX_CHECKPOINT_BYTES) throw new Error("File checkpoint terlalu besar.");
       const parsed = parseCheckpoint(await file.text());
       setCheckpoint(parsed);
+      try {
+        const current = readCurrentBackup(localStorage, { storeProfile, debts, receipts: [] });
+        setCurrentCounts({ debts: current.debts.length, receipts: current.receipts.length });
+      } catch {
+        setCurrentCounts(null);
+      }
     } catch (reason) {
       setStatus({ kind: "error", message: `Gagal membaca checkpoint. ${reason instanceof Error ? reason.message : "File tidak valid."}` });
     } finally {
@@ -86,7 +86,7 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
       restoreCheckpoint(localStorage, checkpoint.data);
       setStatus({ kind: "success", message: "Data berhasil dipulihkan. Aplikasi akan memuat ulang." });
       setCheckpoint(null);
-      onRestored?.();
+      onRestored();
     } catch (reason) {
       setStatus({ kind: "error", message: reason instanceof Error ? reason.message : "Gagal memulihkan data." });
     }
@@ -116,7 +116,11 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
       <span className="backup-scroll-cue" aria-hidden="true">Geser untuk melihat seluruh opsi</span>
 
       {checkpoint && <section className="restore-confirm" aria-label="Konfirmasi pemulihan data">
-        <div className="restore-warning"><RotateCcw size={21}/><div><strong>Peringatan Pemulihan Data</strong><p>Checkpoint {backupDate} berisi {checkpoint.data.debts.length} kasbon dan {checkpoint.data.receipts.length} struk.</p></div></div>
+        <div className="restore-warning"><RotateCcw size={21}/><div><strong>Peringatan Pemulihan Data</strong><p>Cadangan “{checkpoint.data.storeProfile.storeName}” · {backupDate}</p></div></div>
+        <div className="restore-comparison">
+          <span>Saat ini<strong>{currentCounts ? `${currentCounts.debts} kasbon · ${currentCounts.receipts} struk` : "Data saat ini bermasalah"}</strong></span>
+          <span>Akan menjadi<strong>{checkpoint.data.debts.length} kasbon · {checkpoint.data.receipts.length} struk</strong></span>
+        </div>
         <p>Memulihkan data akan menggantikan—bukan menggabungkan—seluruh data yang ada saat ini di HP ini. Pastikan file yang dipilih benar.</p>
         <div className="restore-actions"><button type="button" onClick={() => setCheckpoint(null)}>Batal</button><button type="button" className="restore-danger" onClick={confirmRestore}>Ya, Pulihkan Data</button></div>
       </section>}
