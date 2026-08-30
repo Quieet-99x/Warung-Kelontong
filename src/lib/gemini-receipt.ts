@@ -42,13 +42,31 @@ const responseSchema = {
   },
 };
 
-export async function extractReceiptWithGemini(image: ScanImagePayload, models: GeminiModels, model: string) {
-  const response = await models.generateContent({
+const defaultSleep = (milliseconds: number) => new Promise<void>(resolve => setTimeout(resolve, milliseconds));
+
+export async function extractReceiptWithGemini(
+  image: ScanImagePayload,
+  models: GeminiModels,
+  model: string,
+  sleep: (milliseconds: number) => Promise<void> = defaultSleep,
+) {
+  const request = {
     model,
-    contents: [{ role: "user", parts: [{ inlineData: image }, { text: prompt }] }],
+    contents: [{ role: "user" as const, parts: [{ inlineData: image }, { text: prompt }] }],
     config: { temperature: 0.1, responseMimeType: "application/json", responseSchema },
-  });
-  if (!response.text) throw new Error("Gemini tidak mengembalikan hasil scan");
+  };
+  let response: { text?: string } | undefined;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      response = await models.generateContent(request);
+      break;
+    } catch (error) {
+      const status = typeof error === "object" && error !== null && "status" in error ? Number(error.status) : 0;
+      if (![429, 503, 504].includes(status) || attempt === 2) throw error;
+      await sleep(400 * 2 ** attempt + Math.floor(Math.random() * 150));
+    }
+  }
+  if (!response?.text) throw new Error("Gemini tidak mengembalikan hasil scan");
   let parsed: unknown;
   try {
     parsed = JSON.parse(response.text);

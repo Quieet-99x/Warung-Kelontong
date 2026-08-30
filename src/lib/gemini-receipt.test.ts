@@ -20,6 +20,14 @@ describe("Gemini receipt extraction", () => {
     expect(request.config.temperature).toBe(0.1);
   });
 
+  it("retries transient Gemini failures before succeeding", async () => {
+    const generateContent = vi.fn()
+      .mockRejectedValueOnce(Object.assign(new Error("high demand"), { status: 503 }))
+      .mockResolvedValue({ text: JSON.stringify(result) });
+    await expect(extractReceiptWithGemini(image, { generateContent }, "gemini-3.7-flash", async () => {})).resolves.toMatchObject(result);
+    expect(generateContent).toHaveBeenCalledTimes(2);
+  });
+
   it("rejects malformed model output", async () => {
     const generateContent = vi.fn().mockResolvedValue({ text: "{}" });
     await expect(extractReceiptWithGemini(image, { generateContent }, "gemini-3.7-flash")).rejects.toThrow();

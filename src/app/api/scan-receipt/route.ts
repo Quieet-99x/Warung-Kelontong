@@ -42,9 +42,10 @@ export async function POST(request: Request) {
     const message = error instanceof Error ? error.message : "Gagal membaca struk";
     const invalidRequest = /foto|format|800 KB/i.test(message);
     const rateLimited = /429|quota|rate limit/i.test(message);
+    const unavailable = /503|504|unavailable|high demand/i.test(message);
     return Response.json(
-      { error: rateLimited ? "Kuota scan gratis sedang penuh. Coba lagi beberapa saat." : invalidRequest ? message : "Struk belum dapat dibaca. Coba foto ulang dengan cahaya lebih jelas." },
-      { status: rateLimited ? 429 : invalidRequest ? 400 : 502 },
+      { error: rateLimited ? "Kuota scan gratis sedang penuh. Coba lagi beberapa saat." : unavailable ? "Layanan AI sedang sibuk. Coba scan lagi beberapa saat." : invalidRequest ? message : "Struk belum dapat dibaca. Coba foto ulang dengan cahaya lebih jelas." },
+      { status: rateLimited ? 429 : unavailable ? 503 : invalidRequest ? 400 : 502 },
     );
   }
 }
