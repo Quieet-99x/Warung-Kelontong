@@ -9,7 +9,7 @@ describe("utils", () => {
   it.each(["081234567890", "+62 812-3456-7890", "6281234567890"])("accepts WhatsApp number %s", value => {
     expect(isValidWhatsAppNumber(value)).toBe(true);
   });
-  it.each(["abc", "0812", "", "123456789"])("rejects invalid WhatsApp number %s", value => {
+  it.each(["abc", "0812", "", "123456789", "abc081234567890xyz", "08----------12", "628123456789012"])("rejects invalid WhatsApp number %s", value => {
     expect(isValidWhatsAppNumber(value)).toBe(false);
   });
 });

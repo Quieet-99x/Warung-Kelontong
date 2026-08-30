@@ -22,6 +22,9 @@ describe("Dashboard forms", () => {
     await userEvent.clear(phone);
     await userEvent.type(phone, "08----------12");
     expect(phone).toBeInvalid();
+    await userEvent.clear(phone);
+    await userEvent.type(phone, "abc081234567890xyz");
+    expect(phone).toBeInvalid();
   });
 
   it("does not overwrite corrupt stored data during initial hydration", async () => {
