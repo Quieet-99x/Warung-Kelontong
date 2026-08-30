@@ -1,10 +1,11 @@
 "use client";
 
 import imageCompression from "browser-image-compression";
-import { Camera, ChevronRight, PackageOpen, ReceiptText, Save, Sparkles } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, MessageCircle, PackageOpen, ReceiptText, Save, Sparkles } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { usePurchaseStore } from "@/hooks/usePurchaseStore";
 import { createPurchase } from "@/lib/purchase";
+import { buildPurchaseWhatsAppUrl } from "@/lib/purchase-whatsapp";
 import { applyMargin } from "@/lib/receipt";
 import { formatDate, formatIDR } from "@/lib/utils";
 import type { ReceiptExtraction, ReceiptItem } from "@/types/receipt";
@@ -28,6 +29,7 @@ export default function KulakanPage() {
   const [rounding, setRounding] = useState<500 | 1000>(500);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [expandedPurchaseId, setExpandedPurchaseId] = useState<string | null>(null);
   const pricedItems = useMemo(() => draft ? applyMargin(draft.items, margin, rounding) : [], [draft, margin, rounding]);
   const reviewedTotal = useMemo(() => pricedItems.reduce((total, item) => total + item.qty * item.unitPrice, 0), [pricedItems]);
 
@@ -111,9 +113,27 @@ export default function KulakanPage() {
       <button className="save-purchase" onClick={save}><Save size={19}/> Simpan ke rekap belanja</button>
     </section> : <section className="purchase-history">
       <div className="section-title"><div><span>RIWAYAT BELANJA</span><h2>Struk tersimpan</h2></div><b>{store.purchases.length}</b></div>
-      {store.purchases.length ? store.purchases.map(purchase=><article className="purchase-card" key={purchase.id}>
-        <div className="purchase-icon"><PackageOpen size={21}/></div><div><h3>{purchase.merchantName}</h3><p>{formatDate(purchase.purchaseDate)} · {purchase.items.length} barang</p></div><strong>{formatIDR(purchase.grandTotal)}</strong><ChevronRight size={18}/>
-      </article>) : <div className="empty purchase-empty"><div><ReceiptText size={28}/></div><h3>Belum ada struk kulakan</h3><p>Scan struk pertama untuk mulai membuat rekap modal barang.</p></div>}
+      {store.purchases.length ? store.purchases.map(purchase=>{
+        const expanded = expandedPurchaseId === purchase.id;
+        return <article className={`purchase-card${expanded ? " expanded" : ""}`} key={purchase.id}>
+          <button className="purchase-summary" type="button" aria-expanded={expanded} aria-controls={`purchase-detail-${purchase.id}`} aria-label={`${expanded ? "Tutup" : "Lihat"} detail ${purchase.merchantName}`} onClick={()=>setExpandedPurchaseId(expanded ? null : purchase.id)}>
+            <div className="purchase-icon"><PackageOpen size={21}/></div>
+            <div className="purchase-meta"><h3>{purchase.merchantName}</h3><p>{formatDate(purchase.purchaseDate)} · {purchase.items.length} barang</p></div>
+            <strong>{formatIDR(purchase.grandTotal)}</strong>
+            {expanded ? <ChevronDown size={18}/> : <ChevronRight size={18}/>}
+          </button>
+          {expanded && <div className="purchase-detail" id={`purchase-detail-${purchase.id}`}>
+            <div className="purchase-detail-heading"><span>DETAIL BELANJA</span><b>{purchase.items.length} item</b></div>
+            <div className="purchase-detail-items">{purchase.items.map((item,index)=><div className="purchase-detail-item" key={item.id}>
+              <div className="purchase-detail-name"><span>{index+1}</span><strong>{item.itemName}</strong></div>
+              <p>{item.qty} {item.unit} × {formatIDR(item.unitPrice)}</p>
+              <dl><div><dt>Subtotal modal</dt><dd>{formatIDR(item.totalPrice)}</dd></div><div><dt>Rekomendasi jual</dt><dd>{formatIDR(item.recommendedSellPrice || 0)} / {item.unit}</dd></div></dl>
+            </div>)}</div>
+            <div className="purchase-detail-total"><span>Total modal belanja</span><strong>{formatIDR(purchase.grandTotal)}</strong></div>
+            <a className="purchase-whatsapp" href={buildPurchaseWhatsAppUrl(purchase)} target="_blank" rel="noopener noreferrer"><MessageCircle size={19}/> Rekap ke WhatsApp</a>
+          </div>}
+        </article>;
+      }) : <div className="empty purchase-empty"><div><ReceiptText size={28}/></div><h3>Belum ada struk kulakan</h3><p>Scan struk pertama untuk mulai membuat rekap modal barang.</p></div>}
     </section>}
   </main>;
 }
