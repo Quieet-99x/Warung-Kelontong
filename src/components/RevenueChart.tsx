@@ -18,19 +18,23 @@ export function RevenueChart({ month, closings, type, onTypeChange }: {
     .map(closing => ({ day: Number(closing.date.slice(-2)), value: closing.manualIncome }));
   const monthName = new Intl.DateTimeFormat("id-ID", { month: "long", year: "numeric", timeZone: "UTC" })
     .format(new Date(`${month}-01T00:00:00.000Z`));
+  const [year, monthNumber] = month.split("-").map(Number);
+  const daysInMonth = new Date(Date.UTC(year, monthNumber, 0)).getUTCDate();
   const max = Math.max(1, ...points.map(point => point.value));
   const width = 480;
   const height = 190;
   const left = 18;
   const bottom = 166;
   const chartHeight = 126;
-  const step = points.length > 1 ? (width - 52) / (points.length - 1) : 0;
-  const barWidth = points.length > 1 ? Math.max(5, Math.min(24, step * 0.62)) : 24;
-  const coordinates = points.map((point, index) => ({
+  const dayStep = (width - 52) / Math.max(1, daysInMonth - 1);
+  const barWidth = Math.max(5, Math.min(24, dayStep * 0.62));
+  const coordinates = points.map(point => ({
     ...point,
-    x: points.length === 1 ? width / 2 : left + index * step,
+    x: left + (point.day - 1) * dayStep,
     y: bottom - point.value / max * chartHeight,
   }));
+  const describePoints = points.map(point => `${point.day} ${monthName.split(" ")[0]}: ${formatIDR(point.value)}`).join("; ");
+  const showDayLabel = (day: number) => day === 1 || day === daysInMonth || day % 5 === 0;
 
   return <section className="revenue-chart-card">
     <div className="chart-heading">
@@ -43,13 +47,14 @@ export function RevenueChart({ month, closings, type, onTypeChange }: {
     {points.length ? <>
       <div className="chart-summary"><span>Omset tertinggi</span><strong>{formatIDR(max)}</strong></div>
       <svg className="revenue-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Grafik omset harian ${monthName}`}>
+        <desc>{describePoints}</desc>
         <line x1="18" y1={bottom} x2={width - 18} y2={bottom} className="chart-axis"/>
         {type === "bar" ? coordinates.map(point => <g key={point.day}>
           <rect x={point.x - barWidth / 2} y={point.y} width={barWidth} height={Math.max(2, bottom - point.y)} rx={Math.min(6, barWidth / 2)} className="chart-bar"/>
-          <text x={point.x} y="184" textAnchor="middle">{point.day}</text>
+          {showDayLabel(point.day) && <text x={point.x} y="184" textAnchor="middle">{point.day}</text>}
         </g>) : <>
           <polyline points={coordinates.map(point => `${point.x},${point.y}`).join(" ")} className="chart-line"/>
-          {coordinates.map(point => <g key={point.day}><circle cx={point.x} cy={point.y} r="5" className="chart-point"/><text x={point.x} y="184" textAnchor="middle">{point.day}</text></g>)}
+          {coordinates.map(point => <g key={point.day}><circle cx={point.x} cy={point.y} r="5" className="chart-point"/>{showDayLabel(point.day) && <text x={point.x} y="184" textAnchor="middle">{point.day}</text>}</g>)}
         </>}
       </svg>
     </> : <div className="chart-empty"><ChartNoAxesColumnIncreasing size={24}/><strong>Belum ada data omset</strong><p>Simpan tutup buku harian untuk mulai melihat tren bulan ini.</p></div>}

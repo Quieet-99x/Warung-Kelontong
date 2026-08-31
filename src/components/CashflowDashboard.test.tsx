@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DailyClosingStore } from "@/hooks/useDailyClosingStore";
@@ -16,7 +16,10 @@ const closingStore = {
 
 describe("CashflowDashboard monthly revenue chart", () => {
   beforeEach(() => vi.setSystemTime(new Date("2026-08-31T07:00:00.000Z")));
-  afterEach(() => vi.useRealTimers());
+  afterEach(() => {
+    cleanup();
+    vi.useRealTimers();
+  });
 
   it("shows saved daily revenue and switches between bar and line charts", async () => {
     render(<CashflowDashboard debts={[]} receipts={[]} closingStore={closingStore}/>);
@@ -28,5 +31,18 @@ describe("CashflowDashboard monthly revenue chart", () => {
     await userEvent.click(screen.getByRole("button", { name: "Line" }));
     expect(screen.getByRole("button", { name: "Line" })).toHaveAttribute("aria-pressed", "true");
     expect(document.querySelector("polyline")).toBeInTheDocument();
+    const points = [...document.querySelectorAll(".chart-point")];
+    expect(Number(points[1].getAttribute("cx")) - Number(points[0].getAttribute("cx"))).toBeLessThan(20);
+    expect(screen.getByText(/1 Agustus: Rp/)).toBeInTheDocument();
+  });
+
+  it("keeps the last valid month when the month picker is cleared", async () => {
+    render(<CashflowDashboard debts={[]} receipts={[]} closingStore={closingStore}/>);
+    const picker = screen.getByLabelText("Pilih bulan");
+
+    await userEvent.clear(picker);
+
+    expect(picker).toHaveValue("2026-08");
+    expect(screen.getByRole("img", { name: /Grafik omset harian Agustus 2026/i })).toBeInTheDocument();
   });
 });

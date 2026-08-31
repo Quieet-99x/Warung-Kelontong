@@ -91,7 +91,7 @@ export default function CashflowDashboard({ debts, receipts, closingStore }: Cas
 
     <section className="monthly-cash-card">
       <div className="cashflow-title"><div><span>REKAP KEUANGAN BULANAN</span><h2>Omset, modal & estimasi laba</h2></div><Landmark size={24}/></div>
-      <label className="month-picker"><span>Pilih bulan</span><input type="month" value={month} onChange={event => setMonth(event.target.value)}/></label>
+      <label className="month-picker"><span>Pilih bulan</span><input type="month" value={month} onChange={event => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) setMonth(event.target.value); }}/></label>
       <div className="financial-metrics">
         <article><TrendingUp/><span>Total Omset Penjualan</span><strong>{compactIDR(summary.totalGrossIncome)}</strong></article>
         <article><TrendingDown/><span>Total Modal Kulakan</span><strong>{compactIDR(summary.totalPurchases)}</strong></article>
