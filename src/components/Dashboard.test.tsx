@@ -76,7 +76,7 @@ describe("Dashboard forms", () => {
     render(<Dashboard />);
     await waitFor(() => expect(screen.getByText("Adit")).toBeInTheDocument());
 
-    expect(screen.getByRole("link", { name: /Hubungi Adit via WhatsApp/i })).toContainElement(screen.getByTestId("whatsapp-phone-icon"));
+    expect(screen.getByRole("link", { name: /Hubungi Adit via WhatsApp/i })).not.toContainElement(screen.queryByTestId("whatsapp-phone-icon"));
     await userEvent.click(screen.getByRole("button", { name: /Menu kasbon Adit/i }));
     await userEvent.click(screen.getByRole("button", { name: /Hapus kasbon/i }));
     expect(screen.getByText((_, element) => element?.textContent === "Hapus kasbon Adit sebesar Rp 35.000?")).toBeInTheDocument();

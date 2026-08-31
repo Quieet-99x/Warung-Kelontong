@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarClock, MessageCircle, MoreVertical, Phone, Plus, Trash2, WalletCards } from "lucide-react";
+import { CalendarClock, MessageCircle, MoreVertical, Plus, Trash2, WalletCards } from "lucide-react";
 import { useState } from "react";
 import type { DebtItem, StoreProfile } from "@/types";
 import { formatDate, formatIDR } from "@/lib/utils";
@@ -32,7 +32,7 @@ export function DebtCard({ debt, store, onPay, onAdd, onDelete }: {
       <button onClick={onAdd}><Plus size={16}/> Tambah kasbon</button>
       <button className="pay" onClick={onPay}><WalletCards size={16}/> Bayar / Cicil</button>
       <a className="whatsapp-action" href={buildWhatsAppReminderUrl(debt, store)} target="_blank" rel="noreferrer" aria-label={`Hubungi ${debt.customerName} via WhatsApp`}>
-        <span className="whatsapp-mark"><MessageCircle size={21}/><Phone data-testid="whatsapp-phone-icon" size={10}/></span>
+        <span className="whatsapp-mark"><MessageCircle size={22}/></span>
       </a>
     </div>
   </article>;
