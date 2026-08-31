@@ -14,7 +14,7 @@ describe("Warung app navigation", () => {
     await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Kulakan" }));
     expect(screen.getByRole("heading", { name: "Rekap kulakan" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Scan struk/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Pindai struk/i })).toBeInTheDocument();
   });
 
   it("prefills a new debt from the quick cashier calculator", async () => {

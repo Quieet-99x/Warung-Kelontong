@@ -10,7 +10,7 @@ import { DebtCard } from "./DebtCard";
 import { Modal } from "./Modal";
 
 export type KasbonStore = ReturnType<typeof useKasbonStore>;
-type ModalState = { kind: "add" | "pay" | "increase" | "settings" | "backup"; debt?: DebtItem } | null;
+type ModalState = { kind: "add" | "pay" | "increase" | "settings" | "backup" | "delete"; debt?: DebtItem } | null;
 
 interface DashboardProps {
   store: KasbonStore;
@@ -27,6 +27,7 @@ export function DashboardView({ store, debtPrefill, onDebtPrefillConsumed }: Das
   const [tab, setTab] = useState<"active" | "paid">("active");
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
+  const [deleteError, setDeleteError] = useState("");
   const list = tab === "active" ? store.active : store.paid;
   const filtered = useMemo(() => list.filter(debt =>
     (debt.customerName + debt.phoneNumber + debt.itemsDescription).toLowerCase().includes(search.toLowerCase()),
@@ -55,7 +56,7 @@ export function DashboardView({ store, debtPrefill, onDebtPrefillConsumed }: Das
     </section>
 
     <section className="content">
-      <div className="action-heading"><div><p>Selamat datang kembali 👋</p><h2>Kelola kasbon dengan mudah</h2></div><button className="primary" onClick={() => setModal({ kind: "add" })}><Plus size={19}/> Catat kasbon</button></div>
+      <div className="action-heading"><div><p>Ringkasan kasbon pelanggan</p><h2>Kelola kasbon dengan mudah</h2></div><button className="primary" onClick={() => setModal({ kind: "add" })}><Plus size={19}/> Catat kasbon</button></div>
       <label className="search"><Search size={18}/><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Cari nama, nomor HP, atau barang…"/></label>
       <nav className="tabs">
         <button className={tab === "active" ? "active" : ""} onClick={() => setTab("active")}><WalletCards size={17}/>Kasbon Aktif <b>{store.active.length}</b></button>
@@ -63,13 +64,14 @@ export function DashboardView({ store, debtPrefill, onDebtPrefillConsumed }: Das
       </nav>
       <div className="list-head"><h2>{tab === "active" ? "Daftar kasbon" : "Riwayat pelunasan"}</h2><span>{filtered.length} catatan</span></div>
       {filtered.length ? <div className="debt-list">{filtered.map(debt => tab === "active"
-        ? <DebtCard key={debt.id} debt={debt} store={store.store} onAdd={() => setModal({ kind: "increase", debt })} onPay={() => setModal({ kind: "pay", debt })}/>
+        ? <DebtCard key={debt.id} debt={debt} store={store.store} onAdd={() => setModal({ kind: "increase", debt })} onPay={() => setModal({ kind: "pay", debt })} onDelete={() => { setDeleteError(""); setModal({ kind: "delete", debt }); }}/>
         : <article className="history-card" key={debt.id}><div className="paid-icon"><CheckCircle2/></div><div><h3>{debt.customerName}</h3><p>{debt.itemsDescription}</p><span>Lunas · {formatDate(debt.paymentHistory.at(-1)?.paidAt ?? debt.createdAt)}</span></div><strong>{formatIDR(debt.totalAmount)}</strong></article>,
       )}</div> : <div className="empty"><div><BookOpenCheck size={26}/></div><h3>{tab === "active" ? "Belum ada kasbon aktif" : "Belum ada riwayat lunas"}</h3><p>{tab === "active" ? "Mulai catat kasbon pelanggan pertama Anda." : "Kasbon yang lunas akan tampil di sini."}</p>{tab === "active" && <button className="primary" onClick={() => setModal({ kind: "add" })}>Catat kasbon</button>}</div>}
     </section>
     <footer>Data tersimpan otomatis di perangkat ini · Gunakan cadangan saat pindah HP</footer>
 
     <FormModal state={effectiveModal} close={closeModal} store={store} openBackup={() => setModal({ kind: "backup" })} debtPrefill={debtPrefill}/>
+    <DeleteDebtModal state={effectiveModal} close={closeModal} store={store} error={deleteError} setError={setDeleteError}/>
     <BackupModal open={effectiveModal?.kind === "backup"} onClose={() => setModal(null)} storeProfile={store.store} debts={store.debts} onRestored={() => window.location.reload()}/>
   </main>;
 }
@@ -81,14 +83,16 @@ function FormModal({ state, close, store, openBackup, debtPrefill }: {
   openBackup: () => void;
   debtPrefill?: number | null;
 }) {
-  if (!state || state.kind === "backup") return null;
+  const [saveError, setSaveError] = useState("");
+  if (!state || state.kind === "backup" || state.kind === "delete") return null;
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    let saved = false;
     if (state.kind === "add") {
       const phone = String(form.get("phone"));
       if (!isValidWhatsAppNumber(phone)) return;
-      store.addDebt({
+      saved = store.addDebt({
         customerName: String(form.get("name")),
         phoneNumber: phone,
         itemsDescription: String(form.get("items")),
@@ -96,13 +100,18 @@ function FormModal({ state, close, store, openBackup, debtPrefill }: {
         dueDate: String(form.get("due")) || undefined,
       });
     }
-    if (state.kind === "pay" && state.debt) store.payDebt(state.debt.id, parseIDRInput(String(form.get("amount"))));
-    if (state.kind === "increase" && state.debt) store.addToDebt(state.debt.id, parseIDRInput(String(form.get("amount"))), String(form.get("items")));
-    if (state.kind === "settings") store.setStore({
+    if (state.kind === "pay" && state.debt) saved = store.payDebt(state.debt.id, parseIDRInput(String(form.get("amount"))));
+    if (state.kind === "increase" && state.debt) saved = store.addToDebt(state.debt.id, parseIDRInput(String(form.get("amount"))), String(form.get("items")));
+    if (state.kind === "settings") saved = store.setStore({
       storeName: String(form.get("storeName")),
       ownerName: String(form.get("ownerName")),
       paymentInfo: String(form.get("paymentInfo")),
     });
+    if (!saved) {
+      setSaveError("Catatan belum dapat disimpan. Periksa penyimpanan perangkat, lalu coba lagi.");
+      return;
+    }
+    setSaveError("");
     close();
   };
   const titles = { add: "Catat kasbon baru", pay: "Catat pembayaran", increase: "Tambah kasbon", settings: "Pengaturan warung" };
@@ -124,8 +133,35 @@ function FormModal({ state, close, store, openBackup, debtPrefill }: {
         <Field name="paymentInfo" label="Info pembayaran (opsional)" defaultValue={store.store.paymentInfo}/>
         <button type="button" className="data-center-entry" onClick={openBackup}><DatabaseBackup size={20}/><span><strong>Pusat Data & Cadangan</strong><small>Export rekap, backup, atau pulihkan data</small></span></button>
       </>}
+      {saveError && <p className="delete-error" role="alert">{saveError}</p>}
       <div className="form-actions"><button type="button" onClick={close}>Batal</button><button className="primary form-submit" type="submit">Simpan catatan</button></div>
     </form>
+  </Modal>;
+}
+
+function DeleteDebtModal({ state, close, store, error, setError }: {
+  state: ModalState;
+  close: () => void;
+  store: KasbonStore;
+  error: string;
+  setError: (value: string) => void;
+}) {
+  if (state?.kind !== "delete" || !state.debt) return null;
+  const debt = state.debt;
+  const confirmDelete = () => {
+    if (!store.deleteDebt(debt.id)) {
+      setError("Kasbon belum dapat dihapus. Data tetap tersimpan; periksa ruang penyimpanan perangkat.");
+      return;
+    }
+    close();
+  };
+  return <Modal open title="Hapus kasbon?" subtitle="Tindakan ini tidak dapat dibatalkan" onClose={close}>
+    <div className="delete-confirmation">
+      <p>Hapus kasbon {debt.customerName} sebesar {formatIDR(debt.remainingAmount)}?</p>
+      <small>Riwayat kasbon dan pembayaran pelanggan ini akan dihapus permanen dari perangkat.</small>
+      {error && <div className="delete-error" role="alert">{error}</div>}
+      <div className="form-actions"><button type="button" onClick={close}>Batal</button><button className="delete-confirm" type="button" onClick={confirmDelete}>Ya, hapus kasbon</button></div>
+    </div>
   </Modal>;
 }
 

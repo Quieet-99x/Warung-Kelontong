@@ -1,7 +1,7 @@
 "use client";
 
 import imageCompression from "browser-image-compression";
-import { Camera, ChevronDown, ChevronRight, MessageCircle, PackageOpen, ReceiptText, Save, Sparkles } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, LoaderCircle, MessageCircle, PackageOpen, ReceiptText, Save, Sparkles } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { usePurchaseStore } from "@/hooks/usePurchaseStore";
 import { createPurchase } from "@/lib/purchase";
@@ -33,6 +33,7 @@ export function KulakanPageView({ store }: { store: PurchaseStore }) {
   const [margin, setMargin] = useState(15);
   const [rounding, setRounding] = useState<500 | 1000>(500);
   const [loading, setLoading] = useState(false);
+  const [scanStage, setScanStage] = useState<"preparing" | "analyzing" | null>(null);
   const [error, setError] = useState("");
   const [expandedPurchaseId, setExpandedPurchaseId] = useState<string | null>(null);
   const pricedItems = useMemo(() => draft ? applyMargin(draft.items, margin, rounding) : [], [draft, margin, rounding]);
@@ -42,22 +43,25 @@ export function KulakanPageView({ store }: { store: PurchaseStore }) {
     if (!file) return;
     setError("");
     setLoading(true);
+    setScanStage("preparing");
     try {
       if (!file.type.startsWith("image/")) throw new Error("Pilih file foto struk yang valid.");
       const compressed = await imageCompression(file, { maxSizeMB: 0.78, maxWidthOrHeight: 1800, useWebWorker: true, fileType: "image/jpeg" });
       const image = await fileToDataUrl(compressed);
+      setScanStage("analyzing");
       const response = await fetch("/api/scan-receipt", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image }),
       });
       const payload: { receipt?: ReceiptExtraction; error?: string } = await response.json();
-      if (!response.ok || !payload.receipt) throw new Error(payload.error || "Struk belum dapat dibaca.");
+      if (!response.ok || !payload.receipt) throw new Error(payload.error || "Struk belum berhasil dibaca. Coba foto ulang dengan pencahayaan yang lebih jelas.");
       setDraft(payload.receipt);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Gagal memproses foto struk.");
+      setError(reason instanceof Error ? reason.message : "Foto struk belum berhasil diproses. Silakan coba lagi.");
     } finally {
       setLoading(false);
+      setScanStage(null);
       if (inputRef.current) inputRef.current.value = "";
     }
   };
@@ -82,15 +86,17 @@ export function KulakanPageView({ store }: { store: PurchaseStore }) {
 
   return <main className="kulakan-page">
     <section className="kulakan-hero">
-      <div className="eyebrow"><Sparkles size={14}/> SMART OCR · FREE TIER</div>
+      <div className="eyebrow"><Sparkles size={14}/> PEMINDAI STRUK CERDAS</div>
       <h1>Rekap kulakan</h1>
-      <p>Foto struk grosir, periksa hasil AI, lalu simpan modal dan rekomendasi harga jual.</p>
+      <p>Unggah foto struk kulakan, periksa hasil pembacaan, lalu simpan modal dan rekomendasi harga jual.</p>
       <input ref={inputRef} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={event => void scan(event.target.files?.[0])}/>
       <button className="scan-button" onClick={() => inputRef.current?.click()} disabled={loading}>
-        <Camera size={20}/>{loading ? "AI sedang membaca struk…" : "Scan struk"}
+        {loading ? <LoaderCircle className="spin" size={20}/> : <Camera size={20}/>} {loading ? "Memproses struk…" : "Pindai struk"}
       </button>
-      <small>Foto dikompresi hingga 800 KB, lalu dikirim ke Gemini untuk dibaca. Data Free Tier dapat dipakai Google untuk peningkatan produk.</small>
+      <small>Foto dioptimalkan sebelum dianalisis. Selalu periksa nama barang, jumlah, dan harga sebelum menyimpan.</small>
     </section>
+
+    {scanStage && <div className="scan-progress" role="status" aria-live="polite"><LoaderCircle className="spin" size={22}/><div><strong>{scanStage === "preparing" ? "Menyiapkan foto struk…" : "Menganalisis isi struk…"}</strong><span>{scanStage === "preparing" ? "Mengoptimalkan ukuran foto agar proses lebih cepat." : "Membaca toko, barang, jumlah, dan harga. Mohon tunggu."}</span></div></div>}
 
     {error && <div className="scan-error" role="alert">{error}</div>}
 

@@ -8,6 +8,7 @@ import { downloadTextFile } from "@/lib/backup";
 import { formatDate, formatIDR, parseIDRInput } from "@/lib/utils";
 import type { DebtItem } from "@/types";
 import type { PurchaseReceipt } from "@/types/receipt";
+import { RevenueChart } from "./RevenueChart";
 
 interface CashflowDashboardProps {
   debts: DebtItem[];
@@ -31,6 +32,7 @@ export default function CashflowDashboard({ debts, receipts, closingStore }: Cas
   const [cashDraft, setCashDraft] = useState<string | null>(null);
   const [notesDraft, setNotesDraft] = useState<string | null>(null);
   const [status, setStatus] = useState("");
+  const [chartType, setChartType] = useState<"bar" | "line">("bar");
   const metrics = useMemo(() => calculateDailyMetrics(today, debts, receipts), [today, debts, receipts]);
   const summary = useMemo(() => calculateMonthlySummary(month, closingStore.closings, receipts, debts), [month, closingStore.closings, receipts, debts]);
   const income = incomeDraft ?? String(existing?.manualIncome ?? 0);
@@ -68,7 +70,7 @@ export default function CashflowDashboard({ debts, receipts, closingStore }: Cas
     <section className="cashflow-hero">
       <div className="eyebrow"><BookCheck size={14}/> BUKU KAS & LAPORAN</div>
       <h1>Buku kas warung</h1>
-      <p>Catat omset, cocokkan uang di laci, dan pantau estimasi laba tanpa spreadsheet rumit.</p>
+      <p>Catat omset, cocokkan uang tunai, dan pantau perkembangan keuangan warung dalam satu tempat.</p>
     </section>
 
     <section className="daily-cash-card">
@@ -95,6 +97,7 @@ export default function CashflowDashboard({ debts, receipts, closingStore }: Cas
         <article><TrendingDown/><span>Total Modal Kulakan</span><strong>{compactIDR(summary.totalPurchases)}</strong></article>
         <article className={summary.estimatedGrossProfit < 0 ? "loss" : "profit"}><Landmark/><span>Estimasi Laba Kotor</span><strong>{compactIDR(summary.estimatedGrossProfit)}</strong><small>Margin {margin}%</small></article>
       </div>
+      <RevenueChart month={month} closings={closingStore.closings} type={chartType} onTypeChange={setChartType}/>
       <div className="receivable-health"><h3>Kesehatan Piutang</h3><div><span>Kasbon berhasil ditagih</span><strong>{compactIDR(summary.totalDebtsCollected)}</strong></div><div><span>Kasbon baru masih menggantung</span><strong>{compactIDR(summary.totalNewDebts)}</strong></div></div>
       <button className="download-financial" type="button" onClick={download}><Download size={18}/> Download Laporan Bulanan (.csv)</button>
     </section>
