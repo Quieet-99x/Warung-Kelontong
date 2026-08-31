@@ -24,15 +24,14 @@ describe("QuickCalculator", () => {
     expect(screen.getByText("Rp2.500")).toBeInTheDocument();
   });
 
-  it("builds readable expressions using the mobile operator bar", async () => {
+  it("uses comma, spaces, and a dash directly without an operator shortcut bar", async () => {
     render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => true}/>);
     await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
     const input = screen.getByRole("textbox", { name: /Total belanjaan/i });
-    await userEvent.type(input, "50000");
-    await userEvent.click(screen.getByRole("button", { name: "Kurang" }));
-    await userEvent.type(input, "5000");
-    expect(input).toHaveValue("50000 - 5000");
-    expect(screen.getByText("Rp45.000")).toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: /Operator kalkulator/i })).not.toBeInTheDocument();
+    await userEvent.type(input, "14.000, 26.000 12.500 - 5.000");
+    expect(input).toHaveValue("14.000, 26.000 12.500 - 5.000");
+    expect(screen.getByText("Rp57.500")).toBeInTheDocument();
   });
 
   it("closes on Escape and restores focus to the floating button", async () => {

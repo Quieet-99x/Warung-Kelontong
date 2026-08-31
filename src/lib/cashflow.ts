@@ -13,67 +13,18 @@ const hasValidCalendarDate = (value: string) => {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
 };
 
-function tokenize(expression: string): Array<number | string> {
-  const normalized = expression.replace(/[×]/g, "*").replace(/[÷]/g, "/").replace(/[−–—]/g, "-").replace(/\s+/g, "");
-  if (!normalized || /[^0-9.,+\-*/()]/.test(normalized)) throw new Error("Ekspresi belanja tidak valid.");
-  const tokens: Array<number | string> = [];
-  let index = 0;
-  while (index < normalized.length) {
-    const rest = normalized.slice(index);
-    const number = rest.match(/^\d[\d.,]*/)?.[0];
-    if (number) {
-      let numeric: number;
-      if (/^\d{1,3}(?:\.\d{3})+$/.test(number)) numeric = Number(number.replaceAll(".", ""));
-      else if (/^\d+(?:[.,]\d+)?$/.test(number)) numeric = Number(number.replace(",", "."));
-      else throw new Error("Ekspresi belanja tidak valid.");
-      if (!Number.isFinite(numeric)) throw new Error("Ekspresi belanja tidak valid.");
-      tokens.push(numeric);
-      index += number.length;
-      continue;
-    }
-    const operator = rest[0];
-    if (!"+-*/()".includes(operator)) throw new Error("Ekspresi belanja tidak valid.");
-    tokens.push(operator);
-    index += 1;
-  }
-  return tokens;
-}
-
 export function evaluateCashierExpression(expression: string): number {
-  const tokens = tokenize(expression);
-  let position = 0;
-  const parsePrimary = (): number => {
-    const token = tokens[position++];
-    if (typeof token === "number") return token;
-    if (token === "(") {
-      const value = parseAdditive();
-      if (tokens[position++] !== ")") throw new Error("Ekspresi belanja tidak valid.");
-      return value;
-    }
-    throw new Error("Ekspresi belanja tidak valid.");
-  };
-  const parseMultiplicative = (): number => {
-    let value = parsePrimary();
-    while (tokens[position] === "*" || tokens[position] === "/") {
-      const operator = tokens[position++];
-      const right = parsePrimary();
-      if (operator === "/" && right === 0) throw new Error("Ekspresi belanja tidak valid.");
-      value = operator === "*" ? value * right : value / right;
-    }
-    return value;
-  };
-  const parseAdditive = (): number => {
-    let value = parseMultiplicative();
-    while (tokens[position] === "+" || tokens[position] === "-") {
-      const operator = tokens[position++];
-      const right = parseMultiplicative();
-      value = operator === "+" ? value + right : value - right;
-    }
-    return value;
-  };
-  const result = parseAdditive();
-  if (position !== tokens.length || !Number.isSafeInteger(result) || result < 0) throw new Error("Ekspresi belanja tidak valid.");
-  return result;
+  const normalized = expression.trim().replace(/[−–—]/g, "-");
+  if (!normalized || /[^0-9.,+\-\s]/.test(normalized)) throw new Error("Ekspresi belanja tidak valid.");
+  const items = normalized.split(/[,+\-\s]+/).filter(Boolean);
+  if (!items.length) throw new Error("Ekspresi belanja tidak valid.");
+  return items.reduce((total, item) => {
+    if (!/^\d{1,3}(?:\.\d{3})*$|^\d+$/.test(item)) throw new Error("Ekspresi belanja tidak valid.");
+    const amount = Number(item.replaceAll(".", ""));
+    const next = total + amount;
+    if (!Number.isSafeInteger(next)) throw new Error("Ekspresi belanja tidak valid.");
+    return next;
+  }, 0);
 }
 
 export function calculateDailyMetrics(targetDate: string, debts: DebtItem[], receipts: PurchaseReceipt[]): DailyMetrics {

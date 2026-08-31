@@ -54,14 +54,6 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome }: QuickCalc
   }, [close, open]);
 
   const setQuickCash = (amount: number) => setReceived(String(amount));
-  const appendOperator = (operator: string) => {
-    setExpression(current => `${current.trimEnd()} ${operator} `);
-    window.setTimeout(() => inputRef.current?.focus(), 0);
-  };
-  const deleteExpressionCharacter = () => {
-    setExpression(current => current.trimEnd().slice(0, -1).trimEnd());
-    window.setTimeout(() => inputRef.current?.focus(), 0);
-  };
   const openCalculator = () => { setStatus(""); setOpen(true); };
 
   return <>
@@ -71,17 +63,8 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome }: QuickCalc
       <section ref={panelRef} className="calculator-panel" role="dialog" aria-modal="true" aria-label="Kalkulator kasir cepat">
         <header><div><span>KASIR CEPAT</span><h2><Calculator size={20}/> Kalkulator & Kembalian</h2></div><button type="button" aria-label="Tutup kalkulator" onClick={() => close()}><X size={20}/></button></header>
         <div className="calculator-body">
-          <label className="cashier-field"><span>Total belanjaan</span><input ref={inputRef} aria-label="Total belanjaan" aria-invalid={Boolean(calculation.error)} aria-describedby={calculation.error ? "cashier-expression-error" : undefined} value={expression} onChange={event => setExpression(event.target.value)} placeholder="14.000 + 26.000 - 5.000" inputMode="decimal" autoComplete="off"/><strong>{compactIDR(total)}</strong></label>
+          <label className="cashier-field"><span>Total belanjaan</span><input ref={inputRef} aria-label="Total belanjaan" aria-invalid={Boolean(calculation.error)} aria-describedby={calculation.error ? "cashier-expression-error" : "cashier-input-help"} value={expression} onChange={event => setExpression(event.target.value)} placeholder="14.000, 26.000 12.500 - 5.000" inputMode="decimal" autoComplete="off"/><small id="cashier-input-help">Pisahkan nominal dengan koma, spasi, atau strip. Semuanya akan dijumlahkan.</small><strong>{compactIDR(total)}</strong></label>
           {calculation.error && <p id="cashier-expression-error" className="calculator-error" role="alert">{calculation.error}</p>}
-          <div className="operator-bar" role="group" aria-label="Operator kalkulator">
-            <button type="button" aria-label="Tambah" onClick={() => appendOperator("+")}>+</button>
-            <button type="button" aria-label="Kurang" onClick={() => appendOperator("-")}>−</button>
-            <button type="button" aria-label="Kali" onClick={() => appendOperator("×")}>×</button>
-            <button type="button" aria-label="Bagi" onClick={() => appendOperator("÷")}>÷</button>
-            <button type="button" aria-label="Buka kurung" onClick={() => appendOperator("(")}>(</button>
-            <button type="button" aria-label="Tutup kurung" onClick={() => appendOperator(")")}>)</button>
-            <button type="button" aria-label="Hapus karakter" onClick={deleteExpressionCharacter}>⌫</button>
-          </div>
           <label className="cashier-field"><span>Uang diterima pembeli</span><input aria-label="Uang diterima pembeli" value={received} onChange={event => setReceived(event.target.value)} placeholder="Rp 100.000" inputMode="numeric"/></label>
           <span className="shortcut-label">SHORTCUT UANG DITERIMA</span>
           <div className="cash-shortcuts" aria-label="Pilihan uang cepat">

@@ -48,20 +48,20 @@ const closing: DailyClosingRecord = {
 };
 
 describe("cashier expression", () => {
-  it("evaluates rupiah arithmetic without eval", () => {
+  it("adds rupiah items without eval", () => {
     expect(evaluateCashierExpression("14.000 + 26.000 + 12.500")).toBe(52_500);
-    expect(evaluateCashierExpression("(10000 + 5000) * 2")).toBe(30_000);
-    expect(evaluateCashierExpression("50.000 ÷ 2")).toBe(25_000);
+    expect(evaluateCashierExpression("10.000, 5.000 2.000")).toBe(17_000);
   });
 
-  it("rejects unsafe, malformed, fractional, or negative results", () => {
-    for (const expression of ["alert(1)", "1e6", "1/3", "100-200", "", "9007199254740991+1"]) {
+  it("rejects unsafe, malformed, fractional, or overflowing results", () => {
+    for (const expression of ["alert(1)", "1e6", "1/3", "2*3", "(1000)", "", "- , +", "9007199254740991+1"]) {
       expect(() => evaluateCashierExpression(expression)).toThrow(/tidak valid/i);
     }
   });
 
-  it("accepts spaces and the Unicode minus produced by mobile keyboards", () => {
-    expect(evaluateCashierExpression("50.000 − 5.000")).toBe(45_000);
+  it("treats commas, spaces, and dashes as additive item separators", () => {
+    expect(evaluateCashierExpression("14.000, 26.000 12.500 - 5.000")).toBe(57_500);
+    expect(evaluateCashierExpression("50.000 − 5.000")).toBe(55_000);
   });
 });
 
