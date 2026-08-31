@@ -19,11 +19,13 @@ describe("purchase WhatsApp recap", () => {
     const message = url.searchParams.get("text");
     expect(url.origin + url.pathname).toBe("https://wa.me/");
     expect(message).toContain("*REKAP KULAKAN*");
-    expect(message).toContain("Toko Grosir Berkah");
-    expect(message).toContain("30 Agu 2026");
-    expect(message).toContain("12 Pcs × Rp14.000");
+    expect(message).toContain("*Toko:* Toko Grosir Berkah");
+    expect(message).toContain("*Tanggal:* 30 Agu 2026");
+    expect(message).toContain("*Jumlah barang:* 2");
+    expect(message).toContain("12 Pcs x Rp14.000");
     expect(message).toContain("Subtotal: Rp168.000");
     expect(message).toContain("Rekomendasi jual: Rp16.500 / Pcs");
     expect(message).toContain("*TOTAL MODAL: Rp253.000*");
+    expect(message).not.toMatch(/[\p{Extended_Pictographic}\uFFFD]/u);
   });
 });
