@@ -1,4 +1,5 @@
 import type {Metadata,Viewport} from "next"; import {Plus_Jakarta_Sans} from "next/font/google"; import "./globals.css"; import "./ui-refinements.css";
+import "./inventory.css";
 const font=Plus_Jakarta_Sans({subsets:["latin"],variable:"--font-app"});
 export const metadata:Metadata={title:"Buku Kasbon Warung",description:"Catat dan kelola kasbon pelanggan secara praktis, offline, dan aman."};
 export const viewport:Viewport={width:"device-width",initialScale:1,themeColor:"#116149"};

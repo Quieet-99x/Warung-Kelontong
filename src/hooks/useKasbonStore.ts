@@ -6,11 +6,11 @@ import { addAmountToDebt, applyPayment, assertValidAmount } from "@/lib/debt";
 import { parseStoredDebts, parseStoredStore } from "@/lib/storage";
 import { newId } from "@/lib/utils";
 
-const DEBTS_KEY = "buku-kasbon.debts.v1";
+export const DEBTS_KEY = "buku-kasbon.debts.v1";
 const STORE_KEY = "buku-kasbon.store.v1";
 const defaultStore: StoreProfile = { storeName: "Warung Makmur", ownerName: "Pemilik Warung", paymentInfo: "" };
 
-export function useKasbonStore() {
+export function useKasbonStore(writerEnabled = true) {
   const [debts, setDebts] = useState<DebtItem[]>([]);
   const [store, setStoreState] = useState<StoreProfile>(defaultStore);
   const [hydrated, setHydrated] = useState(false);
@@ -19,31 +19,32 @@ export function useKasbonStore() {
   const validRef = useRef(true);
 
   useEffect(() => {
+    const load = () => {
+      const rawDebts = localStorage.getItem(DEBTS_KEY);
+      const rawStore = localStorage.getItem(STORE_KEY);
+      const storedDebts = rawDebts !== null ? parseStoredDebts(rawDebts) : [];
+      const storedStore = rawStore !== null ? parseStoredStore(rawStore) : defaultStore;
+      if (!storedDebts || !storedStore) { validRef.current = false; return; }
+      validRef.current = true;
+      debtsRef.current = storedDebts;
+      setDebts(storedDebts);
+      setStoreState(storedStore);
+    };
     const timer = window.setTimeout(() => {
-      try {
-        const rawDebts = localStorage.getItem(DEBTS_KEY);
-        const rawStore = localStorage.getItem(STORE_KEY);
-        const storedDebts = rawDebts !== null ? parseStoredDebts(rawDebts) : null;
-        const storedStore = rawStore !== null ? parseStoredStore(rawStore) : null;
-        if ((rawDebts !== null && !storedDebts) || (rawStore !== null && !storedStore)) validRef.current = false;
-        if (storedDebts) {
-          debtsRef.current = storedDebts;
-          setDebts(storedDebts);
-        }
-        if (storedStore) setStoreState(storedStore);
-      } catch {
-        validRef.current = false;
-      } finally {
-        readyRef.current = true;
-        setHydrated(true);
-      }
+      try { load(); } catch { validRef.current = false; }
+      finally { readyRef.current = true; setHydrated(true); }
     }, 0);
-    return () => window.clearTimeout(timer);
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== null && event.key !== DEBTS_KEY && event.key !== STORE_KEY) return;
+      try { load(); } catch { validRef.current = false; }
+    };
+    window.addEventListener("storage", onStorage);
+    return () => { window.clearTimeout(timer); window.removeEventListener("storage", onStorage); };
   }, []);
 
 
   const commitDebts = useCallback((next: DebtItem[]) => {
-    if (!readyRef.current || !validRef.current) return false;
+    if (!writerEnabled || !readyRef.current || !validRef.current) return false;
     const serialized = JSON.stringify(next);
     let previous: string | null | undefined;
     try {
@@ -62,19 +63,28 @@ export function useKasbonStore() {
     debtsRef.current = next;
     setDebts(next);
     return true;
-  }, []);
+  }, [writerEnabled]);
 
-  const addDebt = useCallback((input: Omit<DebtItem, "id" | "remainingAmount" | "status" | "createdAt" | "paymentHistory">) => {
+  const prepareDebt = useCallback((input: Omit<DebtItem, "id" | "remainingAmount" | "status" | "createdAt" | "paymentHistory">) => {
     assertValidAmount(input.totalAmount);
-    return commitDebts([{
+    const debt: DebtItem = {
       ...input,
       id: newId(),
       remainingAmount: input.totalAmount,
       status: "UNPAID",
       createdAt: new Date().toISOString(),
       paymentHistory: [],
-    }, ...debtsRef.current]);
-  }, [commitDebts]);
+    };
+    return { debt, debts: [debt, ...debtsRef.current] };
+  }, []);
+  const acceptCommittedDebts = useCallback((next: DebtItem[]) => {
+    debtsRef.current = next;
+    setDebts(next);
+  }, []);
+  const addDebt = useCallback((input: Omit<DebtItem, "id" | "remainingAmount" | "status" | "createdAt" | "paymentHistory">) => {
+    try { return commitDebts(prepareDebt(input).debts); }
+    catch { return false; }
+  }, [commitDebts, prepareDebt]);
 
   const addToDebt = useCallback((id: string, amount: number, description: string) => {
     try {
@@ -83,6 +93,12 @@ export function useKasbonStore() {
       return false;
     }
   }, [commitDebts]);
+
+  const prepareDebtIncrease = useCallback((id: string, amount: number, description: string) => {
+    assertValidAmount(amount);
+    if (!debtsRef.current.some(debt => debt.id === id)) throw new Error("Kasbon tidak ditemukan.");
+    return debtsRef.current.map(debt => debt.id === id ? addAmountToDebt(debt, amount, description) : debt);
+  }, []);
 
   const payDebt = useCallback((id: string, amount: number) => {
     try {
@@ -98,7 +114,7 @@ export function useKasbonStore() {
   }, [commitDebts]);
 
   const setStore = useCallback((value: StoreProfile) => {
-    if (!readyRef.current || !validRef.current) return false;
+    if (!writerEnabled || !readyRef.current || !validRef.current) return false;
     const serialized = JSON.stringify(value);
     let previous: string | null | undefined;
     try {
@@ -116,10 +132,11 @@ export function useKasbonStore() {
     }
     setStoreState(value);
     return true;
-  }, []);
+  }, [writerEnabled]);
   const active = useMemo(() => debts.filter(debt => debt.status !== "PAID"), [debts]);
   const paid = useMemo(() => debts.filter(debt => debt.status === "PAID"), [debts]);
   const totalReceivable = useMemo(() => active.reduce((sum, debt) => sum + debt.remainingAmount, 0), [active]);
 
-  return { debts, active, paid, store, hydrated, totalReceivable, addDebt, addToDebt, payDebt, deleteDebt, setStore };
+  const canMutate = useCallback(() => writerEnabled && readyRef.current && validRef.current, [writerEnabled]);
+  return { debts, active, paid, store, hydrated, totalReceivable, addDebt, addToDebt, payDebt, deleteDebt, setStore, prepareDebt, prepareDebtIncrease, acceptCommittedDebts, canMutate };
 }

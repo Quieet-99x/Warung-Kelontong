@@ -4,19 +4,23 @@ import { Calculator, CreditCard, PlusCircle, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { evaluateCashierExpression } from "@/lib/cashflow";
 import { formatIDR, parseIDRInput } from "@/lib/utils";
+import type { InventoryItem, StockSelection } from "@/types/inventory";
+import { StockPicker } from "./StockPicker";
 
 interface QuickCalculatorProps {
-  onCreateDebt: (amount: number) => void;
-  onAddIncome: (amount: number) => boolean;
+  onCreateDebt: (amount: number, stockItems: StockSelection[]) => void;
+  onAddIncome: (amount: number, stockItems: StockSelection[]) => boolean;
+  inventory?: InventoryItem[];
 }
 
 const compactIDR = (amount: number) => formatIDR(amount).replace(/\s/g, "");
 
-export default function QuickCalculator({ onCreateDebt, onAddIncome }: QuickCalculatorProps) {
+export default function QuickCalculator({ onCreateDebt, onAddIncome, inventory = [] }: QuickCalculatorProps) {
   const [open, setOpen] = useState(false);
   const [expression, setExpression] = useState("");
   const [received, setReceived] = useState("");
   const [status, setStatus] = useState("");
+  const [stockItems, setStockItems] = useState<StockSelection[]>([]);
   const fabRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -66,6 +70,7 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome }: QuickCalc
           <label className="cashier-field"><span>Total belanjaan</span><input ref={inputRef} aria-label="Total belanjaan" aria-invalid={Boolean(calculation.error)} aria-describedby={calculation.error ? "cashier-expression-error" : "cashier-input-help"} value={expression} onChange={event => setExpression(event.target.value)} placeholder="14.000, 26.000 12.500 - 5.000" inputMode="decimal" autoComplete="off"/><small id="cashier-input-help">Pisahkan nominal dengan koma, spasi, atau strip. Semuanya akan dijumlahkan.</small><strong>{compactIDR(total)}</strong></label>
           {calculation.error && <p id="cashier-expression-error" className="calculator-error" role="alert">{calculation.error}</p>}
           <label className="cashier-field"><span>Uang diterima pembeli</span><input aria-label="Uang diterima pembeli" value={received} onChange={event => setReceived(event.target.value)} placeholder="Rp 100.000" inputMode="numeric"/></label>
+          <StockPicker inventory={inventory} value={stockItems} onChange={setStockItems}/>
           <span className="shortcut-label">SHORTCUT UANG DITERIMA</span>
           <div className="cash-shortcuts" aria-label="Pilihan uang cepat">
             <button type="button" onClick={() => setQuickCash(total)} disabled={!total}>Pas</button>
@@ -73,11 +78,11 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome }: QuickCalc
           </div>
           <div className={`change-card${shortfall ? " shortfall" : ""}`}><span>{!hasReceived ? "MASUKKAN UANG DITERIMA" : shortfall ? "UANG MASIH KURANG" : "UANG KEMBALIAN"}</span><strong>{compactIDR(shortfall || change)}</strong></div>
           <div className="calculator-actions"><span>AKSI CEPAT</span><div>
-            <button type="button" disabled={!total} onClick={() => { onCreateDebt(total); close(false); }}><CreditCard size={17}/> Catat Jadi Kasbon</button>
+            <button type="button" disabled={!total} onClick={() => { onCreateDebt(total, stockItems); close(false); }}><CreditCard size={17}/> Catat Jadi Kasbon</button>
             <button type="button" disabled={!total} onClick={() => {
-              const saved = onAddIncome(total);
-              setStatus(saved ? `${compactIDR(total)} ditambahkan ke omset hari ini.` : "Omset gagal disimpan di perangkat.");
-              if (saved) { setExpression(""); close(); }
+              const saved = onAddIncome(total, stockItems);
+              setStatus(saved ? `${compactIDR(total)} ditambahkan ke omset hari ini.` : "Transaksi dan stok gagal disimpan. Periksa jumlah stok lalu coba lagi.");
+              if (saved) { setExpression(""); setStockItems([]); close(); }
             }}><PlusCircle size={17}/> Tambah ke Omset Hari Ini</button>
           </div></div>
           {status && <p className="calculator-status" role="status">{status}</p>}

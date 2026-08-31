@@ -10,6 +10,7 @@ import {
 import type { DebtItem, StoreProfile } from "@/types";
 import type { PurchaseReceipt } from "@/types/receipt";
 import type { DailyClosingRecord } from "@/types/cashflow";
+import type { InventoryItem, ShoppingListItem, StockMovementLog } from "@/types/inventory";
 
 const store: StoreProfile = { storeName: "Warung Makmur", ownerName: "Rifki", paymentInfo: "BCA 123" };
 const debt: DebtItem = {
@@ -27,6 +28,9 @@ const closing: DailyClosingRecord = {
   paidDebtsToday: 50000, totalExpenseToday: 30000, newDebtsToday: 50000,
   netCashflow: 220000, notes: "Tutup normal", closedAt: "2026-08-30T21:00:00.000Z",
 };
+const inventory: InventoryItem = { id: "s1", name: "Beras", currentStock: 2, unit: "kg", lastCostPrice: 15000, minStockAlert: 3, updatedAt: "2026-08-30T12:00:00.000Z" };
+const stockLog: StockMovementLog = { id: "l1", itemId: "s1", itemName: "Beras", changeQty: 2, type: "IN_PURCHASE", sourceId: "r1", date: "2026-08-30T12:00:00.000Z" };
+const shoppingItem: ShoppingListItem = { id: "b1", inventoryItemId: "s1", itemName: "Beras", checked: false, createdAt: "2026-08-30T12:00:00.000Z" };
 
 describe("backup and recap engine", () => {
   it("builds a UTF-8 monthly CSV with filtered debts, purchases, and safe spreadsheet cells", () => {
@@ -47,17 +51,22 @@ describe("backup and recap engine", () => {
   });
 
   it("round-trips a versioned checkpoint through strict validation", () => {
-    const text = buildCheckpoint({ storeProfile: store, debts: [debt], receipts: [receipt] }, "2026-08-30T12:00:00.000Z");
+    const text = buildCheckpoint({ storeProfile: store, debts: [debt], receipts: [receipt], inventory: [inventory], stockLogs: [stockLog], shoppingList: [shoppingItem] }, "2026-08-30T12:00:00.000Z");
     expect(parseCheckpoint(text)).toEqual({
-      version: "2.0",
+      version: "3.0",
       backupDate: "2026-08-30T12:00:00.000Z",
-      data: { storeProfile: store, debts: [debt], receipts: [receipt], dailyClosings: [] },
+      data: { storeProfile: store, debts: [debt], receipts: [receipt], dailyClosings: [], inventory: [inventory], stockLogs: [stockLog], shoppingList: [shoppingItem] },
     });
   });
 
-  it("backs up daily closings in v2 and imports legacy v1 checkpoints", () => {
-    const v2 = parseCheckpoint(buildCheckpoint({ storeProfile: store, debts: [], receipts: [], dailyClosings: [closing] }));
-    expect(v2).toMatchObject({ version: "2.0", data: { dailyClosings: [closing] } });
+  it("imports legacy v2 checkpoints with empty inventory", () => {
+    const legacy = JSON.stringify({ version: "2.0", backupDate: "2026-08-30T12:00:00.000Z", data: { storeProfile: store, debts: [], receipts: [], dailyClosings: [] } });
+    expect(parseCheckpoint(legacy)).toMatchObject({ version: "2.0", data: { inventory: [], stockLogs: [], shoppingList: [] } });
+  });
+
+  it("backs up daily closings in v3 and imports legacy v1 checkpoints", () => {
+    const v3 = parseCheckpoint(buildCheckpoint({ storeProfile: store, debts: [], receipts: [], dailyClosings: [closing] }));
+    expect(v3).toMatchObject({ version: "3.0", data: { dailyClosings: [closing] } });
 
     const legacy = JSON.stringify({
       version: "1.0", backupDate: "2026-08-30T12:00:00.000Z",
@@ -82,7 +91,7 @@ describe("backup and recap engine", () => {
 
   it("rejects unsupported, oversized, and partially corrupt checkpoints", () => {
     const valid = JSON.parse(buildCheckpoint({ storeProfile: store, debts: [debt], receipts: [receipt] }));
-    expect(() => parseCheckpoint(JSON.stringify({ ...valid, version: "3.0" }))).toThrow(/versi/i);
+    expect(() => parseCheckpoint(JSON.stringify({ ...valid, version: "4.0" }))).toThrow(/versi/i);
     valid.data.debts.push({ id: "corrupt" });
     expect(() => parseCheckpoint(JSON.stringify(valid))).toThrow(/tidak valid/i);
     const duplicate = JSON.parse(buildCheckpoint({ storeProfile: store, debts: [debt, debt], receipts: [receipt] }));
@@ -109,7 +118,7 @@ describe("backup and recap engine", () => {
   });
 
   it("uses fallback only for missing keys and rejects existing corrupt storage", () => {
-    const fallback = { storeProfile: store, debts: [debt], receipts: [receipt], dailyClosings: [] };
+    const fallback = { storeProfile: store, debts: [debt], receipts: [receipt], dailyClosings: [], inventory: [], stockLogs: [], shoppingList: [] };
     const emptyStorage = { getItem: () => null };
     expect(readCurrentBackup(emptyStorage, fallback)).toEqual(fallback);
     const corruptStorage = {

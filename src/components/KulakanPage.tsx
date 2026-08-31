@@ -27,8 +27,9 @@ export default function KulakanPage() {
   return <KulakanPageView store={store}/>;
 }
 
-export function KulakanPageView({ store }: { store: PurchaseStore }) {
+export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStore; onSavePurchase?: (receipt: ReturnType<typeof createPurchase>) => boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const draftIdentityRef = useRef<{ id: string; createdAt: string } | null>(null);
   const [draft, setDraft] = useState<Draft>(null);
   const [margin, setMargin] = useState(15);
   const [rounding, setRounding] = useState<500 | 1000>(500);
@@ -56,6 +57,7 @@ export function KulakanPageView({ store }: { store: PurchaseStore }) {
       });
       const payload: { receipt?: ReceiptExtraction; error?: string } = await response.json();
       if (!response.ok || !payload.receipt) throw new Error(payload.error || "Struk belum berhasil dibaca. Coba foto ulang dengan pencahayaan yang lebih jelas.");
+      draftIdentityRef.current = { id: crypto.randomUUID(), createdAt: new Date().toISOString() };
       setDraft(payload.receipt);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Foto struk belum berhasil diproses. Silakan coba lagi.");
@@ -73,9 +75,12 @@ export function KulakanPageView({ store }: { store: PurchaseStore }) {
   const save = () => {
     if (!draft) return;
     try {
-      const receipt = createPurchase(draft, margin, rounding);
-      if (!store.savePurchase(receipt)) throw new Error("Penyimpanan perangkat penuh atau tidak tersedia. Data belum disimpan.");
+      const identity = draftIdentityRef.current ?? { id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+      draftIdentityRef.current = identity;
+      const receipt = createPurchase(draft, margin, rounding, identity.id, identity.createdAt);
+      if (!(onSavePurchase ?? store.savePurchase)(receipt)) throw new Error("Struk dan stok belum dapat disimpan. Periksa nama barang, satuan, dan penyimpanan perangkat.");
       setDraft(null);
+      draftIdentityRef.current = null;
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Periksa kembali hasil scan sebelum disimpan.");

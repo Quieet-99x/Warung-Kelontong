@@ -1,15 +1,20 @@
 import type { DebtItem, StoreProfile } from "@/types";
 import type { DailyClosingRecord } from "@/types/cashflow";
 import type { PurchaseReceipt } from "@/types/receipt";
+import type { InventoryItem, ShoppingListItem, StockMovementLog } from "@/types/inventory";
 import { parseStoredDebts, parseStoredStore } from "./storage";
 import { parseStoredPurchases } from "./purchase-storage";
 import { parseStoredDailyClosings } from "./cashflow";
+import { INVENTORY_KEYS, parseStoredInventory, parseStoredShoppingList, parseStoredStockLogs } from "./inventory-storage";
 
 export const STORAGE_KEYS = {
   store: "buku-kasbon.store.v1",
   debts: "buku-kasbon.debts.v1",
   receipts: "buku-kasbon.purchases.v1",
   dailyClosings: "daily_closings",
+  inventory: INVENTORY_KEYS.inventory,
+  stockLogs: INVENTORY_KEYS.logs,
+  shoppingList: INVENTORY_KEYS.shoppingList,
 } as const;
 
 export const MAX_CHECKPOINT_BYTES = 5_000_000;
@@ -19,10 +24,13 @@ export interface BackupData {
   debts: DebtItem[];
   receipts: PurchaseReceipt[];
   dailyClosings?: DailyClosingRecord[];
+  inventory?: InventoryItem[];
+  stockLogs?: StockMovementLog[];
+  shoppingList?: ShoppingListItem[];
 }
 
 export interface Checkpoint {
-  version: "1.0" | "2.0";
+  version: "1.0" | "2.0" | "3.0";
   backupDate: string;
   data: BackupData;
 }
@@ -82,8 +90,8 @@ export function buildMonthlyCSV(monthYear: string, debts: DebtItem[], receipts: 
 }
 
 export function buildCheckpoint(data: BackupData, backupDate = new Date().toISOString()): string {
-  const normalizedData = { ...data, dailyClosings: data.dailyClosings ?? [] };
-  const checkpoint = JSON.stringify({ version: "2.0", backupDate, data: normalizedData } satisfies Checkpoint, null, 2);
+  const normalizedData = { ...data, dailyClosings: data.dailyClosings ?? [], inventory: data.inventory ?? [], stockLogs: data.stockLogs ?? [], shoppingList: data.shoppingList ?? [] };
+  const checkpoint = JSON.stringify({ version: "3.0", backupDate, data: normalizedData } satisfies Checkpoint, null, 2);
   if (new TextEncoder().encode(checkpoint).byteLength > MAX_CHECKPOINT_BYTES) {
     throw new Error("File checkpoint terlalu besar untuk dicadangkan.");
   }
@@ -124,6 +132,17 @@ function parseAllDailyClosings(value: unknown): DailyClosingRecord[] | null {
     : null;
 }
 
+function parseInventoryData(inventoryValue: unknown, logsValue: unknown, shoppingValue: unknown) {
+  if (!Array.isArray(inventoryValue) || !Array.isArray(logsValue) || !Array.isArray(shoppingValue)) return null;
+  const inventory = parseStoredInventory(JSON.stringify(inventoryValue));
+  const stockLogs = parseStoredStockLogs(JSON.stringify(logsValue));
+  const shoppingList = parseStoredShoppingList(JSON.stringify(shoppingValue));
+  if (!inventory || !stockLogs || !shoppingList) return null;
+  const itemIds = new Set(inventory.map(item => item.id));
+  if (!stockLogs.every(log => itemIds.has(log.itemId)) || !shoppingList.every(item => itemIds.has(item.inventoryItemId))) return null;
+  return { inventory, stockLogs, shoppingList };
+}
+
 export function parseCheckpoint(text: string): Checkpoint {
   if (new TextEncoder().encode(text).byteLength > MAX_CHECKPOINT_BYTES) {
     throw new Error("File checkpoint terlalu besar.");
@@ -134,7 +153,7 @@ export function parseCheckpoint(text: string): Checkpoint {
   } catch {
     throw new Error("Format file checkpoint tidak valid.");
   }
-  if (!isRecord(value) || (value.version !== "1.0" && value.version !== "2.0")) throw new Error("Versi checkpoint tidak didukung.");
+  if (!isRecord(value) || (value.version !== "1.0" && value.version !== "2.0" && value.version !== "3.0")) throw new Error("Versi checkpoint tidak didukung.");
   if (typeof value.backupDate !== "string" || Number.isNaN(Date.parse(value.backupDate))) {
     throw new Error("Tanggal checkpoint tidak valid.");
   }
@@ -143,8 +162,11 @@ export function parseCheckpoint(text: string): Checkpoint {
   const debts = parseAllDebts(value.data.debts);
   const receipts = parseAllReceipts(value.data.receipts);
   const dailyClosings = value.version === "1.0" ? [] : parseAllDailyClosings(value.data.dailyClosings);
-  if (!storeProfile || !debts || !receipts || !dailyClosings) throw new Error("Data checkpoint tidak valid atau rusak.");
-  return { version: value.version, backupDate: value.backupDate, data: { storeProfile, debts, receipts, dailyClosings } };
+  const inventoryData = value.version === "3.0"
+    ? parseInventoryData(value.data.inventory, value.data.stockLogs, value.data.shoppingList)
+    : { inventory: [], stockLogs: [], shoppingList: [] };
+  if (!storeProfile || !debts || !receipts || !dailyClosings || !inventoryData) throw new Error("Data checkpoint tidak valid atau rusak.");
+  return { version: value.version, backupDate: value.backupDate, data: { storeProfile, debts, receipts, dailyClosings, ...inventoryData } };
 }
 
 export function restoreCheckpoint(storage: StorageLike, data: BackupData): void {
@@ -154,6 +176,9 @@ export function restoreCheckpoint(storage: StorageLike, data: BackupData): void 
     [STORAGE_KEYS.debts, JSON.stringify(data.debts)],
     [STORAGE_KEYS.receipts, JSON.stringify(data.receipts)],
     [STORAGE_KEYS.dailyClosings, JSON.stringify(data.dailyClosings ?? [])],
+    [STORAGE_KEYS.inventory, JSON.stringify(data.inventory ?? [])],
+    [STORAGE_KEYS.stockLogs, JSON.stringify(data.stockLogs ?? [])],
+    [STORAGE_KEYS.shoppingList, JSON.stringify(data.shoppingList ?? [])],
   ]);
   for (const key of next.keys()) previous.set(key, storage.getItem(key));
   try {
@@ -190,39 +215,47 @@ export function readCurrentBackup(
   const debtsRaw = storage.getItem(STORAGE_KEYS.debts);
   const receiptsRaw = storage.getItem(STORAGE_KEYS.receipts);
   const closingsRaw = storage.getItem(STORAGE_KEYS.dailyClosings);
+  const inventoryRaw = storage.getItem(STORAGE_KEYS.inventory);
+  const stockLogsRaw = storage.getItem(STORAGE_KEYS.stockLogs);
+  const shoppingListRaw = storage.getItem(STORAGE_KEYS.shoppingList);
   const storeProfile = storeRaw !== null ? parseStoredStore(storeRaw) : fallback?.storeProfile ?? null;
   let debts = fallback?.debts ?? [];
   let receipts = fallback?.receipts ?? [];
   let dailyClosings = fallback?.dailyClosings ?? [];
+  let inventory = fallback?.inventory ?? [];
+  let stockLogs = fallback?.stockLogs ?? [];
+  let shoppingList = fallback?.shoppingList ?? [];
   if (debtsRaw !== null) {
     try {
       const source: unknown = JSON.parse(debtsRaw);
       debts = parseAllDebts(source) ?? [];
       if (!Array.isArray(source) || debts.length !== source.length) throw new Error();
-    } catch {
-      throw new Error("Data kasbon saat ini tidak valid dan belum dapat dicadangkan.");
-    }
+    } catch { throw new Error("Data kasbon saat ini tidak valid dan belum dapat dicadangkan."); }
   }
   if (receiptsRaw !== null) {
     try {
       const source: unknown = JSON.parse(receiptsRaw);
       receipts = parseAllReceipts(source) ?? [];
       if (!Array.isArray(source) || receipts.length !== source.length) throw new Error();
-    } catch {
-      throw new Error("Data kulakan saat ini tidak valid dan belum dapat dicadangkan.");
-    }
+    } catch { throw new Error("Data kulakan saat ini tidak valid dan belum dapat dicadangkan."); }
   }
   if (closingsRaw !== null) {
     try {
       const source: unknown = JSON.parse(closingsRaw);
       dailyClosings = parseAllDailyClosings(source) ?? [];
       if (!Array.isArray(source) || dailyClosings.length !== source.length) throw new Error();
-    } catch {
-      throw new Error("Data tutup buku saat ini tidak valid dan belum dapat dicadangkan.");
-    }
+    } catch { throw new Error("Data tutup buku saat ini tidak valid dan belum dapat dicadangkan."); }
+  }
+  if (inventoryRaw !== null || stockLogsRaw !== null || shoppingListRaw !== null) {
+    try {
+      if (inventoryRaw === null || stockLogsRaw === null || shoppingListRaw === null) throw new Error();
+      const parsed = parseInventoryData(JSON.parse(inventoryRaw), JSON.parse(stockLogsRaw), JSON.parse(shoppingListRaw));
+      if (!parsed) throw new Error();
+      ({ inventory, stockLogs, shoppingList } = parsed);
+    } catch { throw new Error("Data inventori saat ini tidak valid atau tidak lengkap dan belum dapat dicadangkan."); }
   }
   if (!storeProfile) throw new Error("Profil warung saat ini tidak valid dan belum dapat dicadangkan.");
-  return { storeProfile, debts, receipts, dailyClosings };
+  return { storeProfile, debts, receipts, dailyClosings, inventory, stockLogs, shoppingList };
 }
 
 export function downloadTextFile(content: string, mimeType: string, filename: string): void {

@@ -24,8 +24,9 @@ describe("purchase storage", () => {
     expect(parseStoredPurchases(JSON.stringify([purchase]))).toEqual([purchase]);
   });
 
-  it("recovers valid purchases independently", () => {
-    expect(parseStoredPurchases(JSON.stringify([purchase, { ...purchase, id: "bad", grandTotal: -1 }]))).toEqual([purchase]);
+  it("rejects partial corruption and duplicate receipt IDs", () => {
+    expect(parseStoredPurchases(JSON.stringify([purchase, { ...purchase, id: "bad", grandTotal: -1 }]))).toBeNull();
+    expect(parseStoredPurchases(JSON.stringify([purchase, purchase]))).toBeNull();
   });
 
   it.each([

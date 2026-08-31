@@ -2,12 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { BookOpenCheck, CheckCircle2, DatabaseBackup, History, Plus, Search, Settings2, UsersRound, WalletCards } from "lucide-react";
-import { useKasbonStore } from "@/hooks/useKasbonStore";
+import { DEBTS_KEY, useKasbonStore } from "@/hooks/useKasbonStore";
 import { formatDate, formatIDR, isValidWhatsAppNumber, parseIDRInput } from "@/lib/utils";
 import type { DebtItem } from "@/types";
+import type { StockSelection } from "@/types/inventory";
+import type { InventoryStore } from "./InventoryDashboard";
 import BackupModal from "./BackupModal";
 import { DebtCard } from "./DebtCard";
 import { Modal } from "./Modal";
+import { StockPicker } from "./StockPicker";
 
 export type KasbonStore = ReturnType<typeof useKasbonStore>;
 type ModalState = { kind: "add" | "pay" | "increase" | "settings" | "backup" | "delete"; debt?: DebtItem } | null;
@@ -15,6 +18,8 @@ type ModalState = { kind: "add" | "pay" | "increase" | "settings" | "backup" | "
 interface DashboardProps {
   store: KasbonStore;
   debtPrefill?: number | null;
+  debtStockPrefill?: StockSelection[];
+  inventoryStore?: InventoryStore;
   onDebtPrefillConsumed?: () => void;
 }
 
@@ -23,7 +28,7 @@ export default function Dashboard() {
   return <DashboardView store={store}/>;
 }
 
-export function DashboardView({ store, debtPrefill, onDebtPrefillConsumed }: DashboardProps) {
+export function DashboardView({ store, debtPrefill, debtStockPrefill = [], inventoryStore, onDebtPrefillConsumed }: DashboardProps) {
   const [tab, setTab] = useState<"active" | "paid">("active");
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
@@ -70,20 +75,23 @@ export function DashboardView({ store, debtPrefill, onDebtPrefillConsumed }: Das
     </section>
     <footer>Data tersimpan otomatis di perangkat ini · Gunakan cadangan saat pindah HP</footer>
 
-    <FormModal state={effectiveModal} close={closeModal} store={store} openBackup={() => setModal({ kind: "backup" })} debtPrefill={debtPrefill}/>
+    <FormModal key={`${effectiveModal?.kind ?? "closed"}:${effectiveModal?.debt?.id ?? "new"}`} state={effectiveModal} close={closeModal} store={store} openBackup={() => setModal({ kind: "backup" })} debtPrefill={debtPrefill} debtStockPrefill={debtStockPrefill} inventoryStore={inventoryStore}/>
     <DeleteDebtModal state={effectiveModal} close={closeModal} store={store} error={deleteError} setError={setDeleteError}/>
     <BackupModal open={effectiveModal?.kind === "backup"} onClose={() => setModal(null)} storeProfile={store.store} debts={store.debts} onRestored={() => window.location.reload()}/>
   </main>;
 }
 
-function FormModal({ state, close, store, openBackup, debtPrefill }: {
+function FormModal({ state, close, store, openBackup, debtPrefill, debtStockPrefill, inventoryStore }: {
   state: ModalState;
   close: () => void;
   store: KasbonStore;
   openBackup: () => void;
   debtPrefill?: number | null;
+  debtStockPrefill: StockSelection[];
+  inventoryStore?: InventoryStore;
 }) {
   const [saveError, setSaveError] = useState("");
+  const [stockItems, setStockItems] = useState<StockSelection[]>(state?.kind === "add" ? debtStockPrefill : []);
   if (!state || state.kind === "backup" || state.kind === "delete") return null;
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -92,23 +100,40 @@ function FormModal({ state, close, store, openBackup, debtPrefill }: {
     if (state.kind === "add") {
       const phone = String(form.get("phone"));
       if (!isValidWhatsAppNumber(phone)) return;
-      saved = store.addDebt({
+      const input = {
         customerName: String(form.get("name")),
         phoneNumber: phone,
         itemsDescription: String(form.get("items")),
         totalAmount: parseIDRInput(String(form.get("amount"))),
         dueDate: String(form.get("due")) || undefined,
-      });
+      };
+      if (stockItems.length && inventoryStore && store.canMutate()) {
+        try {
+          const prepared = store.prepareDebt(input);
+          saved = inventoryStore.deductSale(stockItems, "OUT_DEBT", `Kasbon ${input.customerName}`, prepared.debt.id, new Map([[DEBTS_KEY, JSON.stringify(prepared.debts)]]));
+          if (saved) store.acceptCommittedDebts(prepared.debts);
+        } catch { saved = false; }
+      } else saved = store.addDebt(input);
     }
     if (state.kind === "pay" && state.debt) saved = store.payDebt(state.debt.id, parseIDRInput(String(form.get("amount"))));
-    if (state.kind === "increase" && state.debt) saved = store.addToDebt(state.debt.id, parseIDRInput(String(form.get("amount"))), String(form.get("items")));
+    if (state.kind === "increase" && state.debt) {
+      const amount = parseIDRInput(String(form.get("amount")));
+      const description = String(form.get("items"));
+      if (stockItems.length && inventoryStore && store.canMutate()) {
+        try {
+          const nextDebts = store.prepareDebtIncrease(state.debt.id, amount, description);
+          saved = inventoryStore.deductSale(stockItems, "OUT_DEBT", `Tambahan kasbon ${state.debt.customerName}`, `debt-increase-${crypto.randomUUID()}`, new Map([[DEBTS_KEY, JSON.stringify(nextDebts)]]));
+          if (saved) store.acceptCommittedDebts(nextDebts);
+        } catch { saved = false; }
+      } else saved = store.addToDebt(state.debt.id, amount, description);
+    }
     if (state.kind === "settings") saved = store.setStore({
       storeName: String(form.get("storeName")),
       ownerName: String(form.get("ownerName")),
       paymentInfo: String(form.get("paymentInfo")),
     });
     if (!saved) {
-      setSaveError("Catatan belum dapat disimpan. Periksa penyimpanan perangkat, lalu coba lagi.");
+      setSaveError("Kasbon dan stok belum dapat disimpan. Periksa jumlah stok, data barang, dan penyimpanan perangkat.");
       return;
     }
     setSaveError("");
@@ -122,11 +147,12 @@ function FormModal({ state, close, store, openBackup, debtPrefill }: {
         <Field name="name" label="Nama pelanggan" placeholder="Contoh: Ibu Siti"/>
         <Field name="phone" label="Nomor WhatsApp" type="tel" inputMode="tel" pattern="(?:[+]62|62|0)(?: |-)*8(?:(?: |-)*[0-9]){8,11}(?: |-)*" title="Gunakan nomor Indonesia aktif, contoh 081234567890" placeholder="08xxxxxxxxxx"/>
         <Field name="items" label="Barang yang diambil" placeholder="Contoh: Beras 5 kg, minyak 2 L"/>
+        {inventoryStore && <StockPicker inventory={inventoryStore.inventory} value={stockItems} onChange={setStockItems}/>}
         <Field name="amount" label="Total kasbon" type="number" inputMode="numeric" min={1} step={1} defaultValue={debtPrefill ?? undefined} placeholder="Rp 0"/>
         <Field name="due" label="Jatuh tempo (opsional)" type="date"/>
       </>}
       {state.kind === "pay" && <><div className="balance-note"><span>Sisa kasbon</span><strong>{formatIDR(state.debt?.remainingAmount ?? 0)}</strong></div><Field name="amount" label="Jumlah pembayaran" type="number" inputMode="numeric" min={1} max={state.debt?.remainingAmount} step={1}/></>}
-      {state.kind === "increase" && <><Field name="items" label="Barang tambahan"/><Field name="amount" label="Nominal tambahan" type="number" inputMode="numeric" min={1} step={1}/></>}
+      {state.kind === "increase" && <><Field name="items" label="Barang tambahan"/>{inventoryStore && <StockPicker inventory={inventoryStore.inventory} value={stockItems} onChange={setStockItems}/>}<Field name="amount" label="Nominal tambahan" type="number" inputMode="numeric" min={1} step={1}/></>}
       {state.kind === "settings" && <>
         <Field name="storeName" label="Nama warung" defaultValue={store.store.storeName}/>
         <Field name="ownerName" label="Nama pemilik" defaultValue={store.store.ownerName}/>

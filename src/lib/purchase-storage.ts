@@ -42,8 +42,9 @@ export function parseStoredPurchases(raw: string): PurchaseReceipt[] | null {
   try {
     const value: unknown = JSON.parse(raw);
     if (!Array.isArray(value)) return null;
-    const purchases = value.filter(isPurchase);
-    return value.length === 0 || purchases.length > 0 ? purchases : null;
+    if (!value.every(isPurchase)) return null;
+    const purchases = value as PurchaseReceipt[];
+    return new Set(purchases.map(purchase => purchase.id)).size === purchases.length ? purchases : null;
   } catch {
     return null;
   }
