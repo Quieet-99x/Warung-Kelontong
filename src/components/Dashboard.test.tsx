@@ -38,6 +38,13 @@ describe("Dashboard forms", () => {
     expect(screen.getByRole("heading", { name: "Pusat Data & Cadangan" })).toBeInTheDocument();
   });
 
+  it("keeps the save action visibly styled in the new debt modal", async () => {
+    render(<Dashboard />);
+    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
+    expect(screen.getByRole("button", { name: "Simpan catatan" })).toHaveClass("primary", "form-submit");
+  });
+
   it("does not overwrite corrupt stored data during initial hydration", async () => {
     localStorage.setItem("buku-kasbon.debts.v1", "corrupt-data");
     render(<Dashboard />);

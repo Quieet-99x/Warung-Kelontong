@@ -14,7 +14,7 @@ const hasValidCalendarDate = (value: string) => {
 };
 
 function tokenize(expression: string): Array<number | string> {
-  const normalized = expression.replace(/[×]/g, "*").replace(/[÷]/g, "/").replace(/\s+/g, "");
+  const normalized = expression.replace(/[×]/g, "*").replace(/[÷]/g, "/").replace(/[−–—]/g, "-").replace(/\s+/g, "");
   if (!normalized || /[^0-9.,+\-*/()]/.test(normalized)) throw new Error("Ekspresi belanja tidak valid.");
   const tokens: Array<number | string> = [];
   let index = 0;

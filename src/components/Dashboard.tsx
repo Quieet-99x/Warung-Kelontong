@@ -124,7 +124,7 @@ function FormModal({ state, close, store, openBackup, debtPrefill }: {
         <Field name="paymentInfo" label="Info pembayaran (opsional)" defaultValue={store.store.paymentInfo}/>
         <button type="button" className="data-center-entry" onClick={openBackup}><DatabaseBackup size={20}/><span><strong>Pusat Data & Cadangan</strong><small>Export rekap, backup, atau pulihkan data</small></span></button>
       </>}
-      <div className="form-actions"><button type="button" onClick={close}>Batal</button><button className="primary" type="submit">Simpan catatan</button></div>
+      <div className="form-actions"><button type="button" onClick={close}>Batal</button><button className="primary form-submit" type="submit">Simpan catatan</button></div>
     </form>
   </Modal>;
 }

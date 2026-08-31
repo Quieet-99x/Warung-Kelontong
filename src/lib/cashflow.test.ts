@@ -59,6 +59,10 @@ describe("cashier expression", () => {
       expect(() => evaluateCashierExpression(expression)).toThrow(/tidak valid/i);
     }
   });
+
+  it("accepts spaces and the Unicode minus produced by mobile keyboards", () => {
+    expect(evaluateCashierExpression("50.000 − 5.000")).toBe(45_000);
+  });
 });
 
 describe("cashflow calculations", () => {

@@ -13,6 +13,28 @@ describe("QuickCalculator", () => {
     expect(screen.getByRole("button", { name: /Catat Jadi Kasbon/i })).toBeDisabled();
   });
 
+  it("uses payment shortcuts as absolute cash options", async () => {
+    render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => true}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "52500");
+    expect(screen.queryByRole("button", { name: /\+50rb/i })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "50rb" }));
+    expect(screen.getByRole("textbox", { name: /Uang diterima pembeli/i })).toHaveValue("50000");
+    expect(screen.getByText("UANG MASIH KURANG")).toBeInTheDocument();
+    expect(screen.getByText("Rp2.500")).toBeInTheDocument();
+  });
+
+  it("builds readable expressions using the mobile operator bar", async () => {
+    render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => true}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    const input = screen.getByRole("textbox", { name: /Total belanjaan/i });
+    await userEvent.type(input, "50000");
+    await userEvent.click(screen.getByRole("button", { name: "Kurang" }));
+    await userEvent.type(input, "5000");
+    expect(input).toHaveValue("50000 - 5000");
+    expect(screen.getByText("Rp45.000")).toBeInTheDocument();
+  });
+
   it("closes on Escape and restores focus to the floating button", async () => {
     render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => true}/>);
     const fab = screen.getByRole("button", { name: /Buka kalkulator kasir/i });
