@@ -11,6 +11,24 @@ const isPositiveSafeInteger = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 const isValidDateString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0 && !Number.isNaN(Date.parse(value));
+export const MAX_QRIS_DATA_URL_LENGTH = 800_000;
+const QRIS_DATA_URL = /^data:image\/(?:png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/;
+
+export function isValidQrisImage(value: unknown): value is string {
+  if (typeof value !== "string" || value.length > MAX_QRIS_DATA_URL_LENGTH) return false;
+  const match = QRIS_DATA_URL.exec(value);
+  if (!match || match[1].length % 4 !== 0) return false;
+  try {
+    const binary = atob(match[1]);
+    const type = value.slice(11, value.indexOf(";"));
+    if (type === "png") return binary.startsWith("\x89PNG\r\n\x1a\n");
+    if (type === "jpeg") return binary.startsWith("\xff\xd8\xff");
+    if (type === "webp") return binary.startsWith("RIFF") && binary.slice(8, 12) === "WEBP";
+    return false;
+  } catch {
+    return false;
+  }
+}
 
 function isPaymentRecord(value: unknown): value is PaymentRecord {
   return isRecord(value)
@@ -61,11 +79,13 @@ export function parseStoredStore(raw: string): StoreProfile | null {
     if (!isRecord(value)
       || !isNonEmptyString(value.storeName)
       || !isNonEmptyString(value.ownerName)
-      || (value.paymentInfo !== undefined && typeof value.paymentInfo !== "string")) return null;
+      || (value.paymentInfo !== undefined && typeof value.paymentInfo !== "string")
+      || (value.qrisImageBase64 !== undefined && !isValidQrisImage(value.qrisImageBase64))) return null;
     return {
       storeName: value.storeName,
       ownerName: value.ownerName,
       paymentInfo: value.paymentInfo as string | undefined,
+      qrisImageBase64: value.qrisImageBase64 as string | undefined,
     };
   } catch {
     return null;

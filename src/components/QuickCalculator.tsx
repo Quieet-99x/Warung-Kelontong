@@ -1,26 +1,33 @@
 "use client";
 
-import { Calculator, CreditCard, PlusCircle, X } from "lucide-react";
+import { Calculator, CreditCard, PlusCircle, QrCode, X } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { evaluateCashierExpression } from "@/lib/cashflow";
 import { formatIDR, parseIDRInput } from "@/lib/utils";
+import { feedback } from "@/lib/feedback";
 import type { InventoryItem, StockSelection } from "@/types/inventory";
+import type { StoreProfile } from "@/types";
 import { StockPicker } from "./StockPicker";
+import QRISModal from "./QRISModal";
 
 interface QuickCalculatorProps {
   onCreateDebt: (amount: number, stockItems: StockSelection[]) => void;
   onAddIncome: (amount: number, stockItems: StockSelection[]) => boolean;
   inventory?: InventoryItem[];
+  store?: StoreProfile;
 }
 
 const compactIDR = (amount: number) => formatIDR(amount).replace(/\s/g, "");
 
-export default function QuickCalculator({ onCreateDebt, onAddIncome, inventory = [] }: QuickCalculatorProps) {
+const fallbackStore: StoreProfile = { storeName: "Warung", ownerName: "Pemilik Warung" };
+
+export default function QuickCalculator({ onCreateDebt, onAddIncome, inventory = [], store = fallbackStore }: QuickCalculatorProps) {
   const [open, setOpen] = useState(false);
   const [expression, setExpression] = useState("");
   const [received, setReceived] = useState("");
   const [status, setStatus] = useState("");
   const [stockItems, setStockItems] = useState<StockSelection[]>([]);
+  const [qrisOpen, setQrisOpen] = useState(false);
   const fabRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -57,13 +64,13 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome, inventory =
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [close, open]);
 
-  const setQuickCash = (amount: number) => setReceived(String(amount));
+  const setQuickCash = (amount: number) => { feedback.triggerHaptic(10); setReceived(String(amount)); };
   const openCalculator = () => { setStatus(""); setOpen(true); };
 
   return <>
     <button ref={fabRef} className="calculator-fab" type="button" aria-label="Buka kalkulator kasir" onClick={openCalculator}><Calculator size={23}/></button>
     {status && !open && <p className="calculator-toast" role="status">{status}</p>}
-    {open && <div className="calculator-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
+    {open && !qrisOpen && <div className="calculator-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
       <section ref={panelRef} className="calculator-panel" role="dialog" aria-modal="true" aria-label="Kalkulator kasir cepat">
         <header><div><span>KASIR CEPAT</span><h2><Calculator size={20}/> Kalkulator & Kembalian</h2></div><button type="button" aria-label="Tutup kalkulator" onClick={() => close()}><X size={20}/></button></header>
         <div className="calculator-body">
@@ -78,6 +85,7 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome, inventory =
           </div>
           <div className={`change-card${shortfall ? " shortfall" : ""}`}><span>{!hasReceived ? "MASUKKAN UANG DITERIMA" : shortfall ? "UANG MASIH KURANG" : "UANG KEMBALIAN"}</span><strong>{compactIDR(shortfall || change)}</strong></div>
           <div className="calculator-actions"><span>AKSI CEPAT</span><div>
+            <button type="button" disabled={!total} onClick={() => setQrisOpen(true)}><QrCode size={17}/> Tampilkan QRIS</button>
             <button type="button" disabled={!total} onClick={() => { onCreateDebt(total, stockItems); close(false); }}><CreditCard size={17}/> Catat Jadi Kasbon</button>
             <button type="button" disabled={!total} onClick={() => {
               const saved = onAddIncome(total, stockItems);
@@ -89,5 +97,6 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome, inventory =
         </div>
       </section>
     </div>}
+    <QRISModal open={qrisOpen} onClose={() => setQrisOpen(false)} store={store} amount={total}/>
   </>;
 }

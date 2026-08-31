@@ -1,6 +1,7 @@
 "use client";
 
 import imageCompression from "browser-image-compression";
+import { feedback } from "@/lib/feedback";
 import { Camera, ChevronDown, ChevronRight, LoaderCircle, MessageCircle, PackageOpen, ReceiptText, Save, Sparkles } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { usePurchaseStore } from "@/hooks/usePurchaseStore";
@@ -59,6 +60,7 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
       if (!response.ok || !payload.receipt) throw new Error(payload.error || "Struk belum berhasil dibaca. Coba foto ulang dengan pencahayaan yang lebih jelas.");
       draftIdentityRef.current = { id: crypto.randomUUID(), createdAt: new Date().toISOString() };
       setDraft(payload.receipt);
+      feedback.playBeep();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Foto struk belum berhasil diproses. Silakan coba lagi.");
     } finally {

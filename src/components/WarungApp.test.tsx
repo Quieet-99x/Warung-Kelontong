@@ -20,6 +20,7 @@ describe("Warung app navigation", () => {
     } });
     render(<WarungApp />);
     expect(await screen.findByRole("alert")).toHaveTextContent(/Mode baca saja.*tab lain/i);
+    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
     await userEvent.type(screen.getByRole("textbox", { name: "Nama pelanggan" }), "Siti");
     await userEvent.type(screen.getByRole("textbox", { name: "Nomor WhatsApp" }), "081234567890");

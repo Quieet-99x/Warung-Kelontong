@@ -53,6 +53,21 @@ describe("stored data validation", () => {
     });
   });
 
+  it("accepts a validated QRIS image data URL", () => {
+    const qrisImageBase64 = `data:image/png;base64,${btoa("\x89PNG\r\n\x1a\nmock")}`;
+    expect(parseStoredStore(JSON.stringify({ storeName: "Warung A", ownerName: "Rina", qrisImageBase64 })))
+      .toMatchObject({ qrisImageBase64 });
+  });
+
+  it.each([
+    "data:image/svg+xml;base64,PHN2Zz4=",
+    "data:image/png;base64,not valid!",
+    `data:image/png;base64,${btoa("not-a-real-image")}`,
+    `data:image/png;base64,${"A".repeat(820_000)}`,
+  ])("rejects an unsafe QRIS image %s", qrisImageBase64 => {
+    expect(parseStoredStore(JSON.stringify({ storeName: "Warung A", ownerName: "Rina", qrisImageBase64 }))).toBeNull();
+  });
+
   it.each(["[]", "{}", '{"storeName":"Warung A","ownerName":42}']) (
     "rejects invalid store payload %s",
     payload => expect(parseStoredStore(payload)).toBeNull(),

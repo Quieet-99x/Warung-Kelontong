@@ -1,9 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { BookOpenCheck, CheckCircle2, DatabaseBackup, History, Plus, Search, Settings2, UsersRound, WalletCards } from "lucide-react";
+import { BookOpenCheck, CheckCircle2, DatabaseBackup, History, ImageUp, Plus, QrCode, Search, Settings2, Trash2, UsersRound, WalletCards } from "lucide-react";
+import Image from "next/image";
 import { DEBTS_KEY, useKasbonStore } from "@/hooks/useKasbonStore";
 import { formatDate, formatIDR, isValidWhatsAppNumber, parseIDRInput } from "@/lib/utils";
+import { prepareQrisImage } from "@/lib/qris-image";
+import { feedback } from "@/lib/feedback";
 import type { DebtItem } from "@/types";
 import type { StockSelection } from "@/types/inventory";
 import type { InventoryStore } from "./InventoryDashboard";
@@ -11,6 +14,7 @@ import BackupModal from "./BackupModal";
 import { DebtCard } from "./DebtCard";
 import { Modal } from "./Modal";
 import { StockPicker } from "./StockPicker";
+import QRISModal from "./QRISModal";
 
 export type KasbonStore = ReturnType<typeof useKasbonStore>;
 type ModalState = { kind: "add" | "pay" | "increase" | "settings" | "backup" | "delete"; debt?: DebtItem } | null;
@@ -92,6 +96,11 @@ function FormModal({ state, close, store, openBackup, debtPrefill, debtStockPref
 }) {
   const [saveError, setSaveError] = useState("");
   const [stockItems, setStockItems] = useState<StockSelection[]>(state?.kind === "add" ? debtStockPrefill : []);
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [qrisOpen, setQrisOpen] = useState(false);
+  const [qrisImage, setQrisImage] = useState(store.store.qrisImageBase64 ?? "");
+  const [qrisUploadError, setQrisUploadError] = useState("");
+  const [qrisProcessing, setQrisProcessing] = useState(false);
   if (!state || state.kind === "backup" || state.kind === "delete") return null;
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -115,7 +124,8 @@ function FormModal({ state, close, store, openBackup, debtPrefill, debtStockPref
         } catch { saved = false; }
       } else saved = store.addDebt(input);
     }
-    if (state.kind === "pay" && state.debt) saved = store.payDebt(state.debt.id, parseIDRInput(String(form.get("amount"))));
+    const payment = state.kind === "pay" ? parseIDRInput(String(form.get("amount"))) : 0;
+    if (state.kind === "pay" && state.debt) saved = store.payDebt(state.debt.id, payment);
     if (state.kind === "increase" && state.debt) {
       const amount = parseIDRInput(String(form.get("amount")));
       const description = String(form.get("items"));
@@ -131,17 +141,20 @@ function FormModal({ state, close, store, openBackup, debtPrefill, debtStockPref
       storeName: String(form.get("storeName")),
       ownerName: String(form.get("ownerName")),
       paymentInfo: String(form.get("paymentInfo")),
+      qrisImageBase64: qrisImage || undefined,
     });
     if (!saved) {
       setSaveError("Kasbon dan stok belum dapat disimpan. Periksa jumlah stok, data barang, dan penyimpanan perangkat.");
       return;
     }
     setSaveError("");
+    if (state.kind === "pay" && state.debt && payment === state.debt.remainingAmount) feedback.playKaching();
     close();
   };
   const titles = { add: "Catat kasbon baru", pay: "Catat pembayaran", increase: "Tambah kasbon", settings: "Pengaturan warung" };
   const subtitle = state.debt ? state.debt.customerName : state.kind === "add" ? "Isi data pelanggan dan belanjaannya" : "Perbarui identitas dan info pembayaran";
-  return <Modal open title={titles[state.kind]} subtitle={subtitle} onClose={close}>
+  const qrisAmount = parseIDRInput(paymentAmount);
+  return <><Modal open={!qrisOpen} title={titles[state.kind]} subtitle={subtitle} onClose={close}>
     <form onSubmit={submit} className="form">
       {state.kind === "add" && <>
         <Field name="name" label="Nama pelanggan" placeholder="Contoh: Ibu Siti"/>
@@ -151,18 +164,34 @@ function FormModal({ state, close, store, openBackup, debtPrefill, debtStockPref
         <Field name="amount" label="Total kasbon" type="number" inputMode="numeric" min={1} step={1} defaultValue={debtPrefill ?? undefined} placeholder="Rp 0"/>
         <Field name="due" label="Jatuh tempo (opsional)" type="date"/>
       </>}
-      {state.kind === "pay" && <><div className="balance-note"><span>Sisa kasbon</span><strong>{formatIDR(state.debt?.remainingAmount ?? 0)}</strong></div><Field name="amount" label="Jumlah pembayaran" type="number" inputMode="numeric" min={1} max={state.debt?.remainingAmount} step={1}/></>}
+      {state.kind === "pay" && <><div className="balance-note"><span>Sisa kasbon</span><strong>{formatIDR(state.debt?.remainingAmount ?? 0)}</strong></div><Field name="amount" label="Jumlah pembayaran" type="number" inputMode="numeric" min={1} max={state.debt?.remainingAmount} step={1} value={paymentAmount} onChange={event => setPaymentAmount(event.target.value)}/><button className="qris-trigger" type="button" disabled={!qrisAmount || qrisAmount > (state.debt?.remainingAmount ?? 0)} onClick={() => setQrisOpen(true)}><QrCode size={18}/> Bayar via QRIS</button></>}
       {state.kind === "increase" && <><Field name="items" label="Barang tambahan"/>{inventoryStore && <StockPicker inventory={inventoryStore.inventory} value={stockItems} onChange={setStockItems}/>}<Field name="amount" label="Nominal tambahan" type="number" inputMode="numeric" min={1} step={1}/></>}
       {state.kind === "settings" && <>
         <Field name="storeName" label="Nama warung" defaultValue={store.store.storeName}/>
         <Field name="ownerName" label="Nama pemilik" defaultValue={store.store.ownerName}/>
         <Field name="paymentInfo" label="Info pembayaran (opsional)" defaultValue={store.store.paymentInfo}/>
+        <div className="qris-upload-field">
+          <span>Foto QRIS warung (opsional)</span>
+          {qrisImage && <div className="qris-upload-preview"><Image unoptimized src={qrisImage} width={64} height={64} alt="Pratinjau QRIS"/><button type="button" onClick={() => { setQrisImage(""); setQrisUploadError(""); }}><Trash2 size={16}/> Hapus</button></div>}
+          <label className="qris-upload-button"><ImageUp size={18}/><span>{qrisProcessing ? "Memproses gambar…" : qrisImage ? "Ganti foto QRIS" : "Unggah foto QRIS"}</span><input aria-label="Unggah foto QRIS" type="file" accept="image/png,image/jpeg,image/webp" disabled={qrisProcessing} onChange={async event => {
+            const file = event.target.files?.[0];
+            event.target.value = "";
+            if (!file) return;
+            setQrisProcessing(true);
+            setQrisUploadError("");
+            try { setQrisImage(await prepareQrisImage(file)); }
+            catch (error) { setQrisUploadError(error instanceof Error ? error.message : "Gambar QRIS belum dapat diproses."); }
+            finally { setQrisProcessing(false); }
+          }}/></label>
+          <small>PNG, JPEG, atau WebP. Gambar akan diperkecil agar tetap tajam dan hemat penyimpanan.</small>
+          {qrisUploadError && <p className="delete-error" role="alert">{qrisUploadError}</p>}
+        </div>
         <button type="button" className="data-center-entry" onClick={openBackup}><DatabaseBackup size={20}/><span><strong>Pusat Data & Cadangan</strong><small>Export rekap, backup, atau pulihkan data</small></span></button>
       </>}
       {saveError && <p className="delete-error" role="alert">{saveError}</p>}
-      <div className="form-actions"><button type="button" onClick={close}>Batal</button><button className="primary form-submit" type="submit">Simpan catatan</button></div>
+      <div className="form-actions"><button type="button" onClick={close}>Batal</button><button className="primary form-submit" type="submit" disabled={qrisProcessing}>Simpan catatan</button></div>
     </form>
-  </Modal>;
+  </Modal><QRISModal open={qrisOpen} onClose={() => setQrisOpen(false)} store={store.store} amount={qrisAmount}/></>;
 }
 
 function DeleteDebtModal({ state, close, store, error, setError }: {

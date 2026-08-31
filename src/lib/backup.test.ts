@@ -12,7 +12,8 @@ import type { PurchaseReceipt } from "@/types/receipt";
 import type { DailyClosingRecord } from "@/types/cashflow";
 import type { InventoryItem, ShoppingListItem, StockMovementLog } from "@/types/inventory";
 
-const store: StoreProfile = { storeName: "Warung Makmur", ownerName: "Rifki", paymentInfo: "BCA 123" };
+const qrisImageBase64 = `data:image/png;base64,${btoa("\x89PNG\r\n\x1a\nmock")}`;
+const store: StoreProfile = { storeName: "Warung Makmur", ownerName: "Rifki", paymentInfo: "BCA 123", qrisImageBase64 };
 const debt: DebtItem = {
   id: "d1", customerName: "Ibu, Siti", phoneNumber: "081234567890",
   itemsDescription: "=HYPERLINK(\"x\")", totalAmount: 50000, remainingAmount: 50000,
@@ -53,7 +54,7 @@ describe("backup and recap engine", () => {
   it("round-trips a versioned checkpoint through strict validation", () => {
     const text = buildCheckpoint({ storeProfile: store, debts: [debt], receipts: [receipt], inventory: [inventory], stockLogs: [stockLog], shoppingList: [shoppingItem] }, "2026-08-30T12:00:00.000Z");
     expect(parseCheckpoint(text)).toEqual({
-      version: "3.0",
+      version: "4.0",
       backupDate: "2026-08-30T12:00:00.000Z",
       data: { storeProfile: store, debts: [debt], receipts: [receipt], dailyClosings: [], inventory: [inventory], stockLogs: [stockLog], shoppingList: [shoppingItem] },
     });
@@ -64,9 +65,17 @@ describe("backup and recap engine", () => {
     expect(parseCheckpoint(legacy)).toMatchObject({ version: "2.0", data: { inventory: [], stockLogs: [], shoppingList: [] } });
   });
 
-  it("backs up daily closings in v3 and imports legacy v1 checkpoints", () => {
+  it("imports legacy v3 checkpoints without a QRIS image", () => {
+    const legacyStore = { storeName: "Warung Lama", ownerName: "Rina", paymentInfo: "Tunai" };
+    const legacy = JSON.stringify({ version: "3.0", backupDate: "2026-08-30T12:00:00.000Z", data: {
+      storeProfile: legacyStore, debts: [], receipts: [], dailyClosings: [], inventory: [], stockLogs: [], shoppingList: [],
+    } });
+    expect(parseCheckpoint(legacy)).toMatchObject({ version: "3.0", data: { storeProfile: legacyStore } });
+  });
+
+  it("backs up daily closings in v4 and imports legacy v1 checkpoints", () => {
     const v3 = parseCheckpoint(buildCheckpoint({ storeProfile: store, debts: [], receipts: [], dailyClosings: [closing] }));
-    expect(v3).toMatchObject({ version: "3.0", data: { dailyClosings: [closing] } });
+    expect(v3).toMatchObject({ version: "4.0", data: { dailyClosings: [closing] } });
 
     const legacy = JSON.stringify({
       version: "1.0", backupDate: "2026-08-30T12:00:00.000Z",
@@ -91,7 +100,7 @@ describe("backup and recap engine", () => {
 
   it("rejects unsupported, oversized, and partially corrupt checkpoints", () => {
     const valid = JSON.parse(buildCheckpoint({ storeProfile: store, debts: [debt], receipts: [receipt] }));
-    expect(() => parseCheckpoint(JSON.stringify({ ...valid, version: "4.0" }))).toThrow(/versi/i);
+    expect(() => parseCheckpoint(JSON.stringify({ ...valid, version: "5.0" }))).toThrow(/versi/i);
     valid.data.debts.push({ id: "corrupt" });
     expect(() => parseCheckpoint(JSON.stringify(valid))).toThrow(/tidak valid/i);
     const duplicate = JSON.parse(buildCheckpoint({ storeProfile: store, debts: [debt, debt], receipts: [receipt] }));

@@ -67,7 +67,7 @@ export default function WarungApp() {
     <div hidden={page !== "kulakan"}><KulakanPageView store={purchaseStore} onSavePurchase={savePurchase}/></div>
     <div hidden={page !== "inventory"}><InventoryDashboard store={inventoryStore}/></div>
     <div hidden={page !== "cashflow"}><CashflowDashboard debts={kasbonStore.debts} receipts={purchaseStore.purchases} closingStore={closingStore}/></div>
-    <QuickCalculator onCreateDebt={createDebt} onAddIncome={addIncome} inventory={inventoryStore.inventory}/>
+    <QuickCalculator onCreateDebt={createDebt} onAddIncome={addIncome} inventory={inventoryStore.inventory} store={kasbonStore.store}/>
     <nav className="app-bottom-nav" aria-label="Navigasi utama">
       <button className={page === "kasbon" ? "active" : ""} onClick={() => setPage("kasbon")}><BookOpenCheck size={19}/><span>Kasbon</span></button>
       <button className={page === "kulakan" ? "active" : ""} onClick={() => setPage("kulakan")}><ReceiptText size={19}/><span>Kulakan</span></button>

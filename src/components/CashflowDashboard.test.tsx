@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DailyClosingStore } from "@/hooks/useDailyClosingStore";
 import CashflowDashboard from "./CashflowDashboard";
 
+const { playKaching } = vi.hoisted(() => ({ playKaching: vi.fn() }));
+vi.mock("@/lib/feedback", () => ({ feedback: { playKaching } }));
+
 const closingStore = {
   hydrated: true,
   closings: [
@@ -15,7 +18,10 @@ const closingStore = {
 } as unknown as DailyClosingStore;
 
 describe("CashflowDashboard monthly revenue chart", () => {
-  beforeEach(() => vi.setSystemTime(new Date("2026-08-31T07:00:00.000Z")));
+  beforeEach(() => {
+    vi.setSystemTime(new Date("2026-08-31T07:00:00.000Z"));
+    playKaching.mockClear();
+  });
   afterEach(() => {
     cleanup();
     vi.useRealTimers();
@@ -44,5 +50,12 @@ describe("CashflowDashboard monthly revenue chart", () => {
 
     expect(picker).toHaveValue("2026-08");
     expect(screen.getByRole("img", { name: /Grafik omset harian Agustus 2026/i })).toBeInTheDocument();
+  });
+
+  it("plays success feedback only after closing is saved", async () => {
+    const store = { ...closingStore, closeBooks: vi.fn(() => true) } as DailyClosingStore;
+    render(<CashflowDashboard debts={[]} receipts={[]} closingStore={store}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Simpan & Tutup Buku/i }));
+    expect(playKaching).toHaveBeenCalledOnce();
   });
 });

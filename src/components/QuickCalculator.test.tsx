@@ -54,6 +54,14 @@ describe("QuickCalculator", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/Rp52.500.*ditambahkan/i);
   });
 
+  it("opens static QRIS with the calculated total", async () => {
+    render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => true} store={{ storeName: "Warung Makmur", ownerName: "Rifki", qrisImageBase64: "data:image/png;base64,iVBORw0KGgptb2Nr" }}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "65000");
+    await userEvent.click(screen.getByRole("button", { name: /Tampilkan QRIS/i }));
+    expect(screen.getByRole("dialog", { name: /Bayar pakai QRIS/i })).toHaveTextContent("Rp65.000");
+  });
+
   it("shows a failed storage status inside the open dialog", async () => {
     render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => false}/>);
     await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));

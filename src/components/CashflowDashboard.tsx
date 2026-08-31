@@ -6,6 +6,7 @@ import type { DailyClosingStore } from "@/hooks/useDailyClosingStore";
 import { buildCashflowMonthlyCSV, calculateDailyMetrics, calculateMonthlySummary } from "@/lib/cashflow";
 import { downloadTextFile } from "@/lib/backup";
 import { formatDate, formatIDR, parseIDRInput } from "@/lib/utils";
+import { feedback } from "@/lib/feedback";
 import type { DebtItem } from "@/types";
 import type { PurchaseReceipt } from "@/types/receipt";
 import { RevenueChart } from "./RevenueChart";
@@ -57,6 +58,7 @@ export default function CashflowDashboard({ debts, receipts, closingStore }: Cas
       setIncomeDraft(null);
       setCashDraft(null);
       setNotesDraft(null);
+      feedback.playKaching();
     }
     setStatus(saved ? "Tutup buku hari ini berhasil disimpan." : "Data belum tersimpan. Periksa ruang penyimpanan perangkat.");
   };

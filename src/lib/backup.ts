@@ -30,7 +30,7 @@ export interface BackupData {
 }
 
 export interface Checkpoint {
-  version: "1.0" | "2.0" | "3.0";
+  version: "1.0" | "2.0" | "3.0" | "4.0";
   backupDate: string;
   data: BackupData;
 }
@@ -91,7 +91,7 @@ export function buildMonthlyCSV(monthYear: string, debts: DebtItem[], receipts: 
 
 export function buildCheckpoint(data: BackupData, backupDate = new Date().toISOString()): string {
   const normalizedData = { ...data, dailyClosings: data.dailyClosings ?? [], inventory: data.inventory ?? [], stockLogs: data.stockLogs ?? [], shoppingList: data.shoppingList ?? [] };
-  const checkpoint = JSON.stringify({ version: "3.0", backupDate, data: normalizedData } satisfies Checkpoint, null, 2);
+  const checkpoint = JSON.stringify({ version: "4.0", backupDate, data: normalizedData } satisfies Checkpoint, null, 2);
   if (new TextEncoder().encode(checkpoint).byteLength > MAX_CHECKPOINT_BYTES) {
     throw new Error("File checkpoint terlalu besar untuk dicadangkan.");
   }
@@ -153,7 +153,7 @@ export function parseCheckpoint(text: string): Checkpoint {
   } catch {
     throw new Error("Format file checkpoint tidak valid.");
   }
-  if (!isRecord(value) || (value.version !== "1.0" && value.version !== "2.0" && value.version !== "3.0")) throw new Error("Versi checkpoint tidak didukung.");
+  if (!isRecord(value) || (value.version !== "1.0" && value.version !== "2.0" && value.version !== "3.0" && value.version !== "4.0")) throw new Error("Versi checkpoint tidak didukung.");
   if (typeof value.backupDate !== "string" || Number.isNaN(Date.parse(value.backupDate))) {
     throw new Error("Tanggal checkpoint tidak valid.");
   }
@@ -162,7 +162,7 @@ export function parseCheckpoint(text: string): Checkpoint {
   const debts = parseAllDebts(value.data.debts);
   const receipts = parseAllReceipts(value.data.receipts);
   const dailyClosings = value.version === "1.0" ? [] : parseAllDailyClosings(value.data.dailyClosings);
-  const inventoryData = value.version === "3.0"
+  const inventoryData = value.version === "3.0" || value.version === "4.0"
     ? parseInventoryData(value.data.inventory, value.data.stockLogs, value.data.shoppingList)
     : { inventory: [], stockLogs: [], shoppingList: [] };
   if (!storeProfile || !debts || !receipts || !dailyClosings || !inventoryData) throw new Error("Data checkpoint tidak valid atau rusak.");
