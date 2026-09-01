@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BookOpenCheck, CheckCircle2, DatabaseBackup, History, ImageUp, Plus, QrCode, Search, Settings2, Trash2, UsersRound, WalletCards } from "lucide-react";
+import { BookOpenCheck, CheckCircle2, DatabaseBackup, History, ImageUp, Plus, QrCode, Search, Settings2, Trash2, TrendingUp, UsersRound, WalletCards } from "lucide-react";
 import Image from "next/image";
 import { DEBTS_KEY, useKasbonStore } from "@/hooks/useKasbonStore";
 import { formatDate, formatIDR, isValidWhatsAppNumber, parseIDRInput } from "@/lib/utils";
@@ -22,6 +22,7 @@ type ModalState = { kind: "add" | "pay" | "increase" | "settings" | "backup" | "
 
 interface DashboardProps {
   store: KasbonStore;
+  todayTurnover?: number;
   debtPrefill?: number | null;
   debtStockPrefill?: StockSelection[];
   inventoryStore?: InventoryStore;
@@ -33,7 +34,7 @@ export default function Dashboard() {
   return <DashboardView store={store}/>;
 }
 
-export function DashboardView({ store, debtPrefill, debtStockPrefill = [], inventoryStore, onDebtPrefillConsumed }: DashboardProps) {
+export function DashboardView({ store, todayTurnover = 0, debtPrefill, debtStockPrefill = [], inventoryStore, onDebtPrefillConsumed }: DashboardProps) {
   const [tab, setTab] = useState<"active" | "paid">("active");
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
@@ -59,9 +60,16 @@ export function DashboardView({ store, debtPrefill, debtStockPrefill = [], inven
         <div><span>BUKU KASBON DIGITAL</span><h1>{store.store.storeName}</h1><p>{store.store.ownerName}</p></div>
         <button className="settings" onClick={() => setModal({ kind: "settings" })} aria-label="Pengaturan warung"><Settings2 size={19}/></button>
       </div>
-      <div className="total-label">
-        <span>Total piutang aktif</span><strong>{formatIDR(store.totalReceivable)}</strong>
-        <p><UsersRound size={15}/>{store.active.length} pelanggan masih memiliki kasbon</p>
+      <div className="hero-finance-summary">
+        <div className="daily-turnover-card">
+          <div><span>Omzet hari ini</span><small>Uang masuk dari penjualan</small></div>
+          <TrendingUp size={20}/>
+          <strong>{formatIDR(todayTurnover)}</strong>
+        </div>
+        <div className="receivable-summary">
+          <div><span>Total piutang aktif</span><p><UsersRound size={14}/>{store.active.length} pelanggan masih memiliki kasbon</p></div>
+          <strong>{formatIDR(store.totalReceivable)}</strong>
+        </div>
       </div>
     </section>
 

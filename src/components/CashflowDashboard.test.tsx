@@ -42,6 +42,25 @@ describe("CashflowDashboard monthly revenue chart", () => {
     expect(screen.getByText(/1 Agustus: Rp/)).toBeInTheDocument();
   });
 
+  it("uses today's turnover statistics as the report hero without extra hero copy", () => {
+    const store = {
+      ...closingStore,
+      closings: [...closingStore.closings, {
+        id: "today", date: "2026-08-31", cashInDrawer: 125000, manualIncome: 125000,
+        paidDebtsToday: 0, totalExpenseToday: 0, newDebtsToday: 0,
+        netCashflow: 125000, closedAt: "2026-08-31T12:00:00.000Z",
+      }],
+    } as DailyClosingStore;
+    render(<CashflowDashboard debts={[]} receipts={[]} closingStore={store}/>);
+
+    const hero = document.querySelector(".cashflow-hero");
+    expect(hero?.querySelector("h1")?.textContent).toBe("BUKU KAS & LAPORAN");
+    expect(hero).toHaveTextContent("Omzet hari ini");
+    expect(hero).toHaveTextContent(/Rp\s*125\.000/);
+    expect(hero).not.toHaveTextContent("Buku kas warung");
+    expect(hero).not.toHaveTextContent("Catat omset");
+  });
+
   it("keeps the last valid month when the month picker is cleared", async () => {
     render(<CashflowDashboard debts={[]} receipts={[]} closingStore={closingStore}/>);
     const picker = screen.getByLabelText("Pilih bulan");

@@ -2,7 +2,7 @@
 
 import imageCompression from "browser-image-compression";
 import { feedback } from "@/lib/feedback";
-import { Camera, ChevronDown, ChevronRight, FilePenLine, LoaderCircle, MessageCircle, PackageOpen, Plus, ReceiptText, Save, Sparkles } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, FilePenLine, LoaderCircle, MessageCircle, PackageOpen, Plus, ReceiptText, Save } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePurchaseStore } from "@/hooks/usePurchaseStore";
 import { createPurchase } from "@/lib/purchase";
@@ -76,6 +76,7 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
     setScanStage("preparing");
     try {
       if (!file.type.startsWith("image/")) throw new Error("Pilih file foto struk yang valid.");
+      if (file.size > 10_000_000) throw new Error("Ukuran gambar maksimal 10 MB.");
       const compressed = await imageCompression(file, { maxSizeMB: 0.78, maxWidthOrHeight: 1800, useWebWorker: true, fileType: "image/jpeg" });
       const image = await fileToDataUrl(compressed);
       setScanStage("analyzing");
@@ -122,15 +123,13 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
 
   return <main className="kulakan-page">
     <section className="kulakan-hero">
-      <div className="eyebrow"><Sparkles size={14}/> PEMINDAI STRUK CERDAS</div>
-      <h1>Rekap kulakan</h1>
-      <p>Unggah foto struk kulakan, periksa hasil pembacaan, lalu simpan modal dan rekomendasi harga jual.</p>
+      <h1>PEMINDAI STRUK CERDAS</h1>
       <input ref={inputRef} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={event => void scan(event.target.files?.[0])}/>
       <button className="scan-button" onClick={() => inputRef.current?.click()} disabled={loading || Boolean(draft)}>
         {loading ? <LoaderCircle className="spin" size={20}/> : <Camera size={20}/>} {loading ? "Memproses struk…" : "Pindai struk"}
       </button>
       <button className="manual-purchase-button" type="button" onClick={startManual} disabled={loading || Boolean(draft)}><FilePenLine size={19}/> Input Kulakan Manual</button>
-      <small>{draft ? "Simpan atau batalkan draft saat ini sebelum memulai pencatatan baru." : "Foto dioptimalkan sebelum dianalisis. Selalu periksa nama barang, jumlah, dan harga sebelum menyimpan."}</small>
+      <small>{draft ? "Simpan atau batalkan draft saat ini sebelum memulai pencatatan baru." : "Maks. ukuran gambar 10 MB · Pastikan tulisan pada struk terang, fokus, dan terbaca jelas."}</small>
     </section>
 
     {scanStage && <div className="scan-progress" role="status" aria-live="polite"><LoaderCircle className="spin" size={22}/><div><strong>{scanStage === "preparing" ? "Menyiapkan foto struk…" : "Menganalisis isi struk…"}</strong><span>{scanStage === "preparing" ? "Mengoptimalkan ukuran foto agar proses lebih cepat." : "Membaca toko, barang, jumlah, dan harga. Mohon tunggu."}</span></div></div>}

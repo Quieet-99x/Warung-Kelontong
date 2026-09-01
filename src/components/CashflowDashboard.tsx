@@ -70,9 +70,12 @@ export default function CashflowDashboard({ debts, receipts, closingStore }: Cas
 
   return <main className="cashflow-page">
     <section className="cashflow-hero">
-      <div className="eyebrow"><BookCheck size={14}/> BUKU KAS & LAPORAN</div>
-      <h1>Buku kas warung</h1>
-      <p>Catat omset, cocokkan uang tunai, dan pantau perkembangan keuangan warung dalam satu tempat.</p>
+      <h1>BUKU KAS & LAPORAN</h1>
+      <div className="cashflow-hero-turnover"><span>Omzet hari ini</span><strong>{compactIDR(manualIncome)}</strong></div>
+      <div className="cashflow-hero-stats">
+        <div><span>Kasbon tertagih</span><strong>+{compactIDR(metrics.paidDebtsToday)}</strong></div>
+        <div><span>Belanja kulakan</span><strong>-{compactIDR(metrics.totalExpenseToday)}</strong></div>
+      </div>
     </section>
 
     <section className="daily-cash-card">

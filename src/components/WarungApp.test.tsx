@@ -1,6 +1,7 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DAILY_CLOSINGS_KEY } from "@/lib/cashflow-storage";
 import WarungApp from "./WarungApp";
 
 describe("Warung app navigation", () => {
@@ -35,8 +36,45 @@ describe("Warung app navigation", () => {
     render(<WarungApp />);
     await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Kulakan" }));
-    expect(screen.getByRole("heading", { name: "Rekap kulakan" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Pindai struk/i })).toBeInTheDocument();
+    const heading = screen.getByRole("heading", { name: "PEMINDAI STRUK CERDAS" });
+    const scan = screen.getByRole("button", { name: /Pindai struk/i });
+    const manual = screen.getByRole("button", { name: /Input Kulakan Manual/i });
+    const note = screen.getByText(/Maks\. ukuran gambar 10 MB/i);
+    expect(heading.compareDocumentPosition(scan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(scan.compareDocumentPosition(manual) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(manual.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("rejects receipt images above the stated 10 MB limit", async () => {
+    render(<WarungApp/>);
+    await userEvent.click(await screen.findByRole("button", { name: "Kulakan" }));
+    const oversized = new File([new Uint8Array(10_000_001)], "struk.jpg", { type: "image/jpeg" });
+
+    const receiptInput = document.querySelector('input[type="file"][accept="image/jpeg,image/png,image/webp"]') as HTMLInputElement;
+    await userEvent.upload(receiptInput, oversized);
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Ukuran gambar maksimal 10 MB");
+    expect(localStorage.getItem("buku-kasbon.purchases.v1")).toBeNull();
+  });
+
+  it("shows today's turnover above receivables in the Kasbon header", async () => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60_000;
+    const today = new Date(now.getTime() - offset).toISOString().slice(0, 10);
+    localStorage.setItem(DAILY_CLOSINGS_KEY, JSON.stringify([{
+      id: "today", date: today, cashInDrawer: 85000, manualIncome: 85000,
+      paidDebtsToday: 0, totalExpenseToday: 0, newDebtsToday: 0,
+      netCashflow: 85000, closedAt: new Date().toISOString(),
+    }]));
+    render(<WarungApp/>);
+
+    await waitFor(() => expect(document.querySelector(".hero")).toHaveTextContent(/Rp\s*85\.000/));
+    const hero = document.querySelector(".hero") as HTMLElement;
+    const turnover = hero.querySelector(".daily-turnover-card span") as HTMLElement;
+    const receivable = hero.querySelector(".receivable-summary span") as HTMLElement;
+    expect(turnover).toHaveTextContent("Omzet hari ini");
+    expect(receivable).toHaveTextContent("Total piutang aktif");
+    expect(turnover.compareDocumentPosition(receivable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("keeps an unfinished debt form when Home navigation changes modules", async () => {
