@@ -7,6 +7,7 @@ describe("Warung app navigation", () => {
   beforeEach(() => {
     cleanup();
     localStorage.clear();
+    sessionStorage.clear();
     Object.defineProperty(navigator, "locks", { configurable: true, value: {
       request: vi.fn(async (_name: string, _options: object, callback: (lock: object) => Promise<void>) => {
         await callback({});
@@ -36,6 +37,50 @@ describe("Warung app navigation", () => {
     await userEvent.click(screen.getByRole("button", { name: "Kulakan" }));
     expect(screen.getByRole("heading", { name: "Rekap kulakan" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Pindai struk/i })).toBeInTheDocument();
+  });
+
+  it("keeps an unfinished debt form when Home navigation changes modules", async () => {
+    render(<WarungApp/>);
+    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
+    await userEvent.type(screen.getByRole("textbox", { name: "Nama pelanggan" }), "Siti");
+    await userEvent.type(screen.getByRole("textbox", { name: "Barang yang diambil" }), "Beras");
+    await userEvent.click(screen.getByRole("button", { name: "Kulakan" }));
+    await userEvent.click(screen.getByRole("button", { name: "Kasbon" }));
+    expect(screen.getByRole("textbox", { name: "Nama pelanggan" })).toHaveValue("Siti");
+    expect(screen.getByRole("textbox", { name: "Barang yang diambil" })).toHaveValue("Beras");
+  });
+
+  it("restores an unfinished purchase draft after the app remounts", async () => {
+    const first = render(<WarungApp/>);
+    await userEvent.click(await screen.findByRole("button", { name: "Kulakan" }));
+    await userEvent.click(screen.getByRole("button", { name: /Input Kulakan Manual/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Toko grosir" }), "Grosir Draft");
+    await userEvent.type(screen.getByRole("textbox", { name: "Nama barang 1" }), "Beras");
+    first.unmount();
+
+    render(<WarungApp/>);
+    await userEvent.click(await screen.findByRole("button", { name: "Kulakan" }));
+    expect(screen.getByRole("textbox", { name: "Toko grosir" })).toHaveValue("Grosir Draft");
+    expect(screen.getByRole("textbox", { name: "Nama barang 1" })).toHaveValue("Beras");
+    expect(screen.getByRole("button", { name: /Pindai struk/i })).toBeDisabled();
+  });
+
+  it("creates and saves a manual purchase through the inventory pipeline", async () => {
+    render(<WarungApp/>);
+    await userEvent.click(await screen.findByRole("button", { name: "Kulakan" }));
+    await userEvent.click(screen.getByRole("button", { name: /Input Kulakan Manual/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Toko grosir" }), "Grosir Sejahtera");
+    await userEvent.type(screen.getByRole("textbox", { name: "Nama barang 1" }), "Beras");
+    await userEvent.clear(screen.getByRole("spinbutton", { name: "Qty 1" }));
+    await userEvent.type(screen.getByRole("spinbutton", { name: "Qty 1" }), "2");
+    await userEvent.type(screen.getByRole("textbox", { name: "Satuan 1" }), "kg");
+    await userEvent.clear(screen.getByRole("spinbutton", { name: "Harga modal 1" }));
+    await userEvent.type(screen.getByRole("spinbutton", { name: "Harga modal 1" }), "10000");
+    await userEvent.click(screen.getByRole("button", { name: /Simpan ke rekap belanja/i }));
+    const purchases = JSON.parse(localStorage.getItem("buku-kasbon.purchases.v1") ?? "[]");
+    expect(purchases).toHaveLength(1);
+    expect(purchases[0]).toMatchObject({ merchantName: "Grosir Sejahtera", grandTotal: 20_000 });
   });
 
   it("opens inventory and shows low-stock items", async () => {

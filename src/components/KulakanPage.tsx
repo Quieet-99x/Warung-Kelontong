@@ -2,13 +2,14 @@
 
 import imageCompression from "browser-image-compression";
 import { feedback } from "@/lib/feedback";
-import { Camera, ChevronDown, ChevronRight, LoaderCircle, MessageCircle, PackageOpen, ReceiptText, Save, Sparkles } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { Camera, ChevronDown, ChevronRight, FilePenLine, LoaderCircle, MessageCircle, PackageOpen, Plus, ReceiptText, Save, Sparkles } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePurchaseStore } from "@/hooks/usePurchaseStore";
 import { createPurchase } from "@/lib/purchase";
 import { buildPurchaseWhatsAppUrl } from "@/lib/purchase-whatsapp";
 import { applyMargin } from "@/lib/receipt";
 import { formatDate, formatIDR } from "@/lib/utils";
+import { clearFormDraft, PURCHASE_DRAFT_KEY, readPurchaseDraft, writeFormDraft } from "@/lib/form-drafts";
 import type { ReceiptExtraction, ReceiptItem } from "@/types/receipt";
 
 type Draft = ReceiptExtraction | null;
@@ -30,16 +31,43 @@ export default function KulakanPage() {
 
 export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStore; onSavePurchase?: (receipt: ReturnType<typeof createPurchase>) => boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const draftIdentityRef = useRef<{ id: string; createdAt: string } | null>(null);
-  const [draft, setDraft] = useState<Draft>(null);
-  const [margin, setMargin] = useState(15);
-  const [rounding, setRounding] = useState<500 | 1000>(500);
+  const restored = useMemo(() => readPurchaseDraft(), []);
+  const draftIdentityRef = useRef<{ id: string; createdAt: string } | null>(restored?.identity ?? null);
+  const [draft, setDraft] = useState<Draft>(restored?.draft ?? null);
+  const [margin, setMargin] = useState(restored?.margin ?? 15);
+  const [rounding, setRounding] = useState<500 | 1000>(restored?.rounding ?? 500);
   const [loading, setLoading] = useState(false);
   const [scanStage, setScanStage] = useState<"preparing" | "analyzing" | null>(null);
   const [error, setError] = useState("");
   const [expandedPurchaseId, setExpandedPurchaseId] = useState<string | null>(null);
-  const pricedItems = useMemo(() => draft ? applyMargin(draft.items, margin, rounding) : [], [draft, margin, rounding]);
+  const pricedItems = useMemo(() => {
+    if (!draft) return [];
+    return draft.items.map(item => {
+      try { return applyMargin([item], margin, rounding)[0]; }
+      catch { return { ...item, recommendedSellPrice: 0 }; }
+    });
+  }, [draft, margin, rounding]);
   const reviewedTotal = useMemo(() => pricedItems.reduce((total, item) => total + item.qty * item.unitPrice, 0), [pricedItems]);
+
+  useEffect(() => {
+    if (!draft) return;
+    const identity = draftIdentityRef.current ?? { id: crypto.randomUUID(), createdAt: new Date().toISOString() };
+    draftIdentityRef.current = identity;
+    writeFormDraft(PURCHASE_DRAFT_KEY, { draft, margin, rounding, identity });
+  }, [draft, margin, rounding]);
+
+  const startManual = () => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60_000;
+    draftIdentityRef.current = { id: crypto.randomUUID(), createdAt: now.toISOString() };
+    setDraft({
+      merchantName: "",
+      purchaseDate: new Date(now.getTime() - offset).toISOString().slice(0, 10),
+      grandTotal: 1,
+      items: [{ id: crypto.randomUUID(), itemName: "", qty: 1, unit: "", unitPrice: 1, totalPrice: 1 }],
+    });
+    setError("");
+  };
 
   const scan = async (file?: File) => {
     if (!file) return;
@@ -83,6 +111,7 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
       if (!(onSavePurchase ?? store.savePurchase)(receipt)) throw new Error("Struk dan stok belum dapat disimpan. Periksa nama barang, satuan, dan penyimpanan perangkat.");
       setDraft(null);
       draftIdentityRef.current = null;
+      clearFormDraft(PURCHASE_DRAFT_KEY);
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Periksa kembali hasil scan sebelum disimpan.");
@@ -97,10 +126,11 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
       <h1>Rekap kulakan</h1>
       <p>Unggah foto struk kulakan, periksa hasil pembacaan, lalu simpan modal dan rekomendasi harga jual.</p>
       <input ref={inputRef} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={event => void scan(event.target.files?.[0])}/>
-      <button className="scan-button" onClick={() => inputRef.current?.click()} disabled={loading}>
+      <button className="scan-button" onClick={() => inputRef.current?.click()} disabled={loading || Boolean(draft)}>
         {loading ? <LoaderCircle className="spin" size={20}/> : <Camera size={20}/>} {loading ? "Memproses struk…" : "Pindai struk"}
       </button>
-      <small>Foto dioptimalkan sebelum dianalisis. Selalu periksa nama barang, jumlah, dan harga sebelum menyimpan.</small>
+      <button className="manual-purchase-button" type="button" onClick={startManual} disabled={loading || Boolean(draft)}><FilePenLine size={19}/> Input Kulakan Manual</button>
+      <small>{draft ? "Simpan atau batalkan draft saat ini sebelum memulai pencatatan baru." : "Foto dioptimalkan sebelum dianalisis. Selalu periksa nama barang, jumlah, dan harga sebelum menyimpan."}</small>
     </section>
 
     {scanStage && <div className="scan-progress" role="status" aria-live="polite"><LoaderCircle className="spin" size={22}/><div><strong>{scanStage === "preparing" ? "Menyiapkan foto struk…" : "Menganalisis isi struk…"}</strong><span>{scanStage === "preparing" ? "Mengoptimalkan ukuran foto agar proses lebih cepat." : "Membaca toko, barang, jumlah, dan harga. Mohon tunggu."}</span></div></div>}
@@ -108,7 +138,7 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
     {error && <div className="scan-error" role="alert">{error}</div>}
 
     {draft ? <section className="receipt-review">
-      <div className="section-title"><div><span>HASIL SCAN</span><h2>Periksa sebelum disimpan</h2></div><ReceiptText size={24}/></div>
+      <div className="section-title"><div><span>DRAFT KULAKAN</span><h2>Periksa sebelum disimpan</h2></div><ReceiptText size={24}/></div>
       <div className="review-grid">
         <label><span>Toko grosir</span><input value={draft.merchantName} onChange={e => setDraft({...draft, merchantName:e.target.value})}/></label>
         <label><span>Tanggal</span><input type="date" value={draft.purchaseDate} onChange={e => setDraft({...draft, purchaseDate:e.target.value})}/></label>
@@ -122,13 +152,14 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
         <div className="item-number">{index+1}</div>
         <div className="item-edit">
           <input aria-label={`Nama barang ${index+1}`} value={item.itemName} onChange={e=>updateItem(item.id,{itemName:e.target.value})}/>
-          <div><label>Qty<input type="number" min="0.01" step="0.01" value={item.qty} onChange={e=>updateItem(item.id,{qty:Number(e.target.value)})}/></label><label>Satuan<input value={item.unit} onChange={e=>updateItem(item.id,{unit:e.target.value})}/></label></div>
-          <label>Harga modal / unit<input type="number" min="1" step="1" value={item.unitPrice} onChange={e=>updateItem(item.id,{unitPrice:Number(e.target.value)})}/></label>
+          <div><label>Qty<input aria-label={`Qty ${index+1}`} type="number" min="0.01" step="0.01" value={item.qty} onChange={e=>updateItem(item.id,{qty:Number(e.target.value)})}/></label><label>Satuan<input aria-label={`Satuan ${index+1}`} value={item.unit} onChange={e=>updateItem(item.id,{unit:e.target.value})}/></label></div>
+          <label>Harga modal / unit<input aria-label={`Harga modal ${index+1}`} type="number" min="1" step="1" value={item.unitPrice} onChange={e=>updateItem(item.id,{unitPrice:Number(e.target.value)})}/></label>
         </div>
         <div className="price-stack"><span>Modal {formatIDR(item.unitPrice)}</span><strong>Jual {formatIDR(item.recommendedSellPrice||0)}</strong></div>
       </article>)}</div>
+      <button className="add-manual-item" type="button" onClick={() => setDraft(current => current ? {...current, items:[...current.items, { id:crypto.randomUUID(), itemName:"", qty:1, unit:"", unitPrice:1, totalPrice:1 }]} : current)}><Plus size={17}/> Tambah barang</button>
       <div className="receipt-total"><span>Total belanja terhitung</span><strong>{formatIDR(reviewedTotal)}</strong></div>
-      <button className="save-purchase" onClick={save}><Save size={19}/> Simpan ke rekap belanja</button>
+      <div className="purchase-draft-actions"><button type="button" onClick={() => { setDraft(null); draftIdentityRef.current = null; clearFormDraft(PURCHASE_DRAFT_KEY); setError(""); }}>Batalkan draft</button><button className="save-purchase" onClick={save}><Save size={19}/> Simpan ke rekap belanja</button></div>
     </section> : <section className="purchase-history">
       <div className="section-title"><div><span>RIWAYAT BELANJA</span><h2>Struk tersimpan</h2></div><b>{store.purchases.length}</b></div>
       {store.purchases.length ? store.purchases.map(purchase=>{

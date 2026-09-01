@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Dashboard from "./Dashboard";
 
 vi.mock("@/lib/qris-image", () => ({
+  assertValidQrisUpload: vi.fn(),
   prepareQrisImage: vi.fn(async () => `data:image/jpeg;base64,${btoa("\xff\xd8\xffmock")}`),
 }));
 const { playKaching } = vi.hoisted(() => ({ playKaching: vi.fn() }));
@@ -13,6 +14,9 @@ describe("Dashboard forms", () => {
   beforeEach(() => {
     cleanup();
     localStorage.clear();
+    sessionStorage.clear();
+    Object.defineProperty(URL, "createObjectURL", { configurable: true, value: vi.fn(() => "blob:qris-preview") });
+    Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: vi.fn() });
     playKaching.mockClear();
   });
 
@@ -52,7 +56,9 @@ describe("Dashboard forms", () => {
     await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Pengaturan warung" }));
     await userEvent.upload(screen.getByLabelText(/Unggah foto QRIS/i), new File(["image"], "qris.png", { type: "image/png" }));
-    await waitFor(() => expect(screen.getByRole("img", { name: /Pratinjau QRIS/i })).toBeInTheDocument());
+    expect(screen.getByLabelText("Atur crop QRIS")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Gunakan hasil crop" }));
+    await waitFor(() => expect(screen.getByRole("img", { name: /^Pratinjau QRIS$/i })).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Simpan catatan" }));
     expect(JSON.parse(localStorage.getItem("buku-kasbon.store.v1") ?? "null").qrisImageBase64)
       .toBe(`data:image/jpeg;base64,${btoa("\xff\xd8\xffmock")}`);
@@ -63,6 +69,38 @@ describe("Dashboard forms", () => {
     await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
     expect(screen.getByRole("button", { name: "Simpan catatan" })).toHaveClass("primary", "form-submit");
+  });
+
+  it("restores an unfinished debt after the component remounts", async () => {
+    const first = render(<Dashboard/>);
+    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
+    await userEvent.type(screen.getByRole("textbox", { name: "Nama pelanggan" }), "Siti");
+    await userEvent.type(screen.getByRole("textbox", { name: "Barang yang diambil" }), "Beras");
+    first.unmount();
+
+    render(<Dashboard/>);
+    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
+    expect(screen.getByRole("textbox", { name: "Nama pelanggan" })).toHaveValue("Siti");
+    expect(screen.getByRole("textbox", { name: "Barang yang diambil" })).toHaveValue("Beras");
+  });
+
+  it("adds a purchase to an existing customer instead of creating another profile", async () => {
+    localStorage.setItem("buku-kasbon.debts.v1", JSON.stringify([{
+      id: "debt-1", customerName: "Siti", phoneNumber: "081234567890", itemsDescription: "Beras",
+      totalAmount: 20_000, remainingAmount: 20_000, status: "UNPAID", createdAt: "2026-08-31T00:00:00.000Z", paymentHistory: [],
+    }]));
+    render(<Dashboard/>);
+    await waitFor(() => expect(screen.getByText("Siti")).toBeInTheDocument());
+    await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
+    await userEvent.click(screen.getByRole("button", { name: /Pilih Siti/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: "Barang tambahan" }), "Minyak");
+    await userEvent.type(screen.getByRole("spinbutton", { name: "Nominal tambahan" }), "15000");
+    await userEvent.click(screen.getByRole("button", { name: "Simpan catatan" }));
+    const debts = JSON.parse(localStorage.getItem("buku-kasbon.debts.v1") ?? "[]");
+    expect(debts).toHaveLength(1);
+    expect(debts[0]).toMatchObject({ id: "debt-1", totalAmount: 35_000, remainingAmount: 35_000 });
   });
 
   it("keeps the form open and reports a storage failure", async () => {

@@ -1,12 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { BookOpenCheck, CheckCircle2, DatabaseBackup, History, ImageUp, Plus, QrCode, Search, Settings2, Trash2, UsersRound, WalletCards } from "lucide-react";
 import Image from "next/image";
 import { DEBTS_KEY, useKasbonStore } from "@/hooks/useKasbonStore";
 import { formatDate, formatIDR, isValidWhatsAppNumber, parseIDRInput } from "@/lib/utils";
-import { prepareQrisImage } from "@/lib/qris-image";
+import { assertValidQrisUpload, calculateCropPreviewGeometry, prepareQrisImage, type QrisCrop } from "@/lib/qris-image";
 import { feedback } from "@/lib/feedback";
+import { clearFormDraft, DEBT_DRAFT_KEY, readDebtDraft, writeFormDraft, type DebtFormDraft } from "@/lib/form-drafts";
 import type { DebtItem } from "@/types";
 import type { StockSelection } from "@/types/inventory";
 import type { InventoryStore } from "./InventoryDashboard";
@@ -79,17 +80,18 @@ export function DashboardView({ store, debtPrefill, debtStockPrefill = [], inven
     </section>
     <footer>Data tersimpan otomatis di perangkat ini · Gunakan cadangan saat pindah HP</footer>
 
-    <FormModal key={`${effectiveModal?.kind ?? "closed"}:${effectiveModal?.debt?.id ?? "new"}`} state={effectiveModal} close={closeModal} store={store} openBackup={() => setModal({ kind: "backup" })} debtPrefill={debtPrefill} debtStockPrefill={debtStockPrefill} inventoryStore={inventoryStore}/>
+    <FormModal key={`${effectiveModal?.kind ?? "closed"}:${effectiveModal?.debt?.id ?? "new"}`} state={effectiveModal} close={closeModal} store={store} openBackup={() => setModal({ kind: "backup" })} selectExisting={debt => { clearFormDraft(DEBT_DRAFT_KEY); setModal({ kind: "increase", debt }); }} debtPrefill={debtPrefill} debtStockPrefill={debtStockPrefill} inventoryStore={inventoryStore}/>
     <DeleteDebtModal state={effectiveModal} close={closeModal} store={store} error={deleteError} setError={setDeleteError}/>
     <BackupModal open={effectiveModal?.kind === "backup"} onClose={() => setModal(null)} storeProfile={store.store} debts={store.debts} onRestored={() => window.location.reload()}/>
   </main>;
 }
 
-function FormModal({ state, close, store, openBackup, debtPrefill, debtStockPrefill, inventoryStore }: {
+function FormModal({ state, close, store, openBackup, selectExisting, debtPrefill, debtStockPrefill, inventoryStore }: {
   state: ModalState;
   close: () => void;
   store: KasbonStore;
   openBackup: () => void;
+  selectExisting: (debt: DebtItem) => void;
   debtPrefill?: number | null;
   debtStockPrefill: StockSelection[];
   inventoryStore?: InventoryStore;
@@ -101,6 +103,38 @@ function FormModal({ state, close, store, openBackup, debtPrefill, debtStockPref
   const [qrisImage, setQrisImage] = useState(store.store.qrisImageBase64 ?? "");
   const [qrisUploadError, setQrisUploadError] = useState("");
   const [qrisProcessing, setQrisProcessing] = useState(false);
+  const [qrisCropFile, setQrisCropFile] = useState<File | null>(null);
+  const [qrisCropPreview, setQrisCropPreview] = useState("");
+  const [qrisCrop, setQrisCrop] = useState<QrisCrop>({ zoom: 1, x: 0, y: 0 });
+  const [qrisImageSize, setQrisImageSize] = useState({ width: 0, height: 0 });
+  const [debtDraft, setDebtDraft] = useState<DebtFormDraft>(() => readDebtDraft() ?? {
+    name: "", phone: "", items: "", amount: debtPrefill ? String(debtPrefill) : "", due: "",
+  });
+  const existingCustomers = useMemo(() => {
+    const sorted = [...store.debts].sort((left, right) => {
+      const statusOrder = Number(left.status === "PAID") - Number(right.status === "PAID");
+      return statusOrder || right.createdAt.localeCompare(left.createdAt);
+    });
+    const unique = new Map<string, DebtItem>();
+    for (const debt of sorted) {
+      const key = debt.phoneNumber.replace(/\D/g, "") || debt.customerName.trim().toLocaleLowerCase("id-ID");
+      if (!unique.has(key)) unique.set(key, debt);
+    }
+    return [...unique.values()];
+  }, [store.debts]);
+  useEffect(() => {
+    if (state?.kind === "add") writeFormDraft(DEBT_DRAFT_KEY, debtDraft);
+  }, [debtDraft, state?.kind]);
+  useEffect(() => () => { if (qrisCropPreview) URL.revokeObjectURL(qrisCropPreview); }, [qrisCropPreview]);
+  const qrisPreviewGeometry = qrisImageSize.width && qrisImageSize.height
+    ? calculateCropPreviewGeometry(qrisImageSize.width, qrisImageSize.height, qrisCrop)
+    : null;
+  const qrisPreviewStyle = qrisPreviewGeometry ? {
+    width: `${qrisPreviewGeometry.widthPercent}%`,
+    height: `${qrisPreviewGeometry.heightPercent}%`,
+    left: `${qrisPreviewGeometry.leftPercent}%`,
+    top: `${qrisPreviewGeometry.topPercent}%`,
+  } : undefined;
   if (!state || state.kind === "backup" || state.kind === "delete") return null;
   const submit = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -148,6 +182,7 @@ function FormModal({ state, close, store, openBackup, debtPrefill, debtStockPref
       return;
     }
     setSaveError("");
+    if (state.kind === "add") clearFormDraft(DEBT_DRAFT_KEY);
     if (state.kind === "pay" && state.debt && payment === state.debt.remainingAmount) feedback.playKaching();
     close();
   };
@@ -157,12 +192,13 @@ function FormModal({ state, close, store, openBackup, debtPrefill, debtStockPref
   return <><Modal open={!qrisOpen} title={titles[state.kind]} subtitle={subtitle} onClose={close}>
     <form onSubmit={submit} className="form">
       {state.kind === "add" && <>
-        <Field name="name" label="Nama pelanggan" placeholder="Contoh: Ibu Siti"/>
-        <Field name="phone" label="Nomor WhatsApp" type="tel" inputMode="tel" pattern="(?:[+]62|62|0)(?: |-)*8(?:(?: |-)*[0-9]){8,11}(?: |-)*" title="Gunakan nomor Indonesia aktif, contoh 081234567890" placeholder="08xxxxxxxxxx"/>
-        <Field name="items" label="Barang yang diambil" placeholder="Contoh: Beras 5 kg, minyak 2 L"/>
+        {existingCustomers.length > 0 && <div className="existing-customer-panel"><span>Pelanggan Kasbon tersimpan</span><small>Pilih pelanggan agar pembelian ditambahkan ke profil dan riwayat yang sama.</small><div>{existingCustomers.map(debt => <button type="button" key={debt.id} onClick={() => selectExisting(debt)}><strong>{debt.customerName}</strong><span>{debt.phoneNumber} · {debt.status === "PAID" ? "Riwayat lunas" : `Sisa ${formatIDR(debt.remainingAmount)}`}</span><b>Pilih {debt.customerName}</b></button>)}</div></div>}
+        <Field name="name" label="Nama pelanggan" placeholder="Contoh: Ibu Siti" value={debtDraft.name} onChange={event => setDebtDraft({...debtDraft, name:event.target.value})}/>
+        <Field name="phone" label="Nomor WhatsApp" type="tel" inputMode="tel" pattern="(?:[+]62|62|0)(?: |-)*8(?:(?: |-)*[0-9]){8,11}(?: |-)*" title="Gunakan nomor Indonesia aktif, contoh 081234567890" placeholder="08xxxxxxxxxx" value={debtDraft.phone} onChange={event => setDebtDraft({...debtDraft, phone:event.target.value})}/>
+        <Field name="items" label="Barang yang diambil" placeholder="Contoh: Beras 5 kg, minyak 2 L" value={debtDraft.items} onChange={event => setDebtDraft({...debtDraft, items:event.target.value})}/>
         {inventoryStore && <StockPicker inventory={inventoryStore.inventory} value={stockItems} onChange={setStockItems}/>}
-        <Field name="amount" label="Total kasbon" type="number" inputMode="numeric" min={1} step={1} defaultValue={debtPrefill ?? undefined} placeholder="Rp 0"/>
-        <Field name="due" label="Jatuh tempo (opsional)" type="date"/>
+        <Field name="amount" label="Total kasbon" type="number" inputMode="numeric" min={1} step={1} value={debtDraft.amount} onChange={event => setDebtDraft({...debtDraft, amount:event.target.value})} placeholder="Rp 0"/>
+        <Field name="due" label="Jatuh tempo (opsional)" type="date" value={debtDraft.due} onChange={event => setDebtDraft({...debtDraft, due:event.target.value})}/>
       </>}
       {state.kind === "pay" && <><div className="balance-note"><span>Sisa kasbon</span><strong>{formatIDR(state.debt?.remainingAmount ?? 0)}</strong></div><Field name="amount" label="Jumlah pembayaran" type="number" inputMode="numeric" min={1} max={state.debt?.remainingAmount} step={1} value={paymentAmount} onChange={event => setPaymentAmount(event.target.value)}/><button className="qris-trigger" type="button" disabled={!qrisAmount || qrisAmount > (state.debt?.remainingAmount ?? 0)} onClick={() => setQrisOpen(true)}><QrCode size={18}/> Bayar via QRIS</button></>}
       {state.kind === "increase" && <><Field name="items" label="Barang tambahan"/>{inventoryStore && <StockPicker inventory={inventoryStore.inventory} value={stockItems} onChange={setStockItems}/>}<Field name="amount" label="Nominal tambahan" type="number" inputMode="numeric" min={1} step={1}/></>}
@@ -173,23 +209,38 @@ function FormModal({ state, close, store, openBackup, debtPrefill, debtStockPref
         <div className="qris-upload-field">
           <span>Foto QRIS warung (opsional)</span>
           {qrisImage && <div className="qris-upload-preview"><Image unoptimized src={qrisImage} width={64} height={64} alt="Pratinjau QRIS"/><button type="button" onClick={() => { setQrisImage(""); setQrisUploadError(""); }}><Trash2 size={16}/> Hapus</button></div>}
-          <label className="qris-upload-button"><ImageUp size={18}/><span>{qrisProcessing ? "Memproses gambar…" : qrisImage ? "Ganti foto QRIS" : "Unggah foto QRIS"}</span><input aria-label="Unggah foto QRIS" type="file" accept="image/png,image/jpeg,image/webp" disabled={qrisProcessing} onChange={async event => {
+          <label className="qris-upload-button"><ImageUp size={18}/><span>{qrisImage ? "Ganti foto QRIS" : "Unggah foto QRIS"}</span><input aria-label="Unggah foto QRIS" type="file" accept="image/png,image/jpeg,image/webp" disabled={qrisProcessing} onChange={event => {
             const file = event.target.files?.[0];
             event.target.value = "";
             if (!file) return;
-            setQrisProcessing(true);
             setQrisUploadError("");
-            try { setQrisImage(await prepareQrisImage(file)); }
+            try {
+              assertValidQrisUpload(file);
+              setQrisCropFile(file);
+              setQrisCropPreview(URL.createObjectURL(file));
+              setQrisCrop({ zoom: 1, x: 0, y: 0 });
+              setQrisImageSize({ width: 0, height: 0 });
+            }
             catch (error) { setQrisUploadError(error instanceof Error ? error.message : "Gambar QRIS belum dapat diproses."); }
-            finally { setQrisProcessing(false); }
           }}/></label>
-          <small>PNG, JPEG, atau WebP. Gambar akan diperkecil agar tetap tajam dan hemat penyimpanan.</small>
+          {qrisCropFile && qrisCropPreview && <div className="qris-crop-editor" aria-label="Atur crop QRIS">
+            <div className="qris-crop-viewport"><Image unoptimized src={qrisCropPreview} alt="Pratinjau crop QRIS" width={1} height={1} onLoad={event => setQrisImageSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} style={qrisPreviewStyle}/><span aria-hidden="true"/></div>
+            <label><span>Perbesar</span><input aria-label="Perbesar crop QRIS" type="range" min="1" max="3" step="0.1" value={qrisCrop.zoom} onChange={event => setQrisCrop({...qrisCrop, zoom:Number(event.target.value)})}/></label>
+            <div className="qris-crop-position"><label><span>Geser horizontal</span><input aria-label="Geser crop horizontal" type="range" min="-1" max="1" step="0.05" value={qrisCrop.x} onChange={event => setQrisCrop({...qrisCrop, x:Number(event.target.value)})}/></label><label><span>Geser vertikal</span><input aria-label="Geser crop vertikal" type="range" min="-1" max="1" step="0.05" value={qrisCrop.y} onChange={event => setQrisCrop({...qrisCrop, y:Number(event.target.value)})}/></label></div>
+            <div className="qris-crop-actions"><button type="button" onClick={() => { setQrisCropFile(null); setQrisCropPreview(""); setQrisImageSize({ width: 0, height: 0 }); }}>Batal crop</button><button className="primary" type="button" disabled={qrisProcessing} onClick={async () => {
+              setQrisProcessing(true); setQrisUploadError("");
+              try { setQrisImage(await prepareQrisImage(qrisCropFile, qrisCrop)); setQrisCropFile(null); setQrisCropPreview(""); setQrisImageSize({ width: 0, height: 0 }); }
+              catch (error) { setQrisUploadError(error instanceof Error ? error.message : "Gambar QRIS belum dapat diproses."); }
+              finally { setQrisProcessing(false); }
+            }}>{qrisProcessing ? "Memproses…" : "Gunakan hasil crop"}</button></div>
+          </div>}
+          <small>PNG, JPEG, atau WebP. Atur area QR agar rapi, lalu simpan hasil crop.</small>
           {qrisUploadError && <p className="delete-error" role="alert">{qrisUploadError}</p>}
         </div>
         <button type="button" className="data-center-entry" onClick={openBackup}><DatabaseBackup size={20}/><span><strong>Pusat Data & Cadangan</strong><small>Export rekap, backup, atau pulihkan data</small></span></button>
       </>}
       {saveError && <p className="delete-error" role="alert">{saveError}</p>}
-      <div className="form-actions"><button type="button" onClick={close}>Batal</button><button className="primary form-submit" type="submit" disabled={qrisProcessing}>Simpan catatan</button></div>
+      <div className="form-actions"><button type="button" onClick={() => { if (state.kind === "add") clearFormDraft(DEBT_DRAFT_KEY); close(); }}>Batal</button><button className="primary form-submit" type="submit" disabled={qrisProcessing}>Simpan catatan</button></div>
     </form>
   </Modal><QRISModal open={qrisOpen} onClose={() => setQrisOpen(false)} store={store.store} amount={qrisAmount}/></>;
 }
