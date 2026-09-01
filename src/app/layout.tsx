@@ -1,6 +1,7 @@
 import type {Metadata,Viewport} from "next"; import {Plus_Jakarta_Sans} from "next/font/google"; import "./globals.css"; import "./ui-refinements.css";
 import "./inventory.css";
 import "./pwa-qris.css";
+import "./page-header-system.css";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 const font=Plus_Jakarta_Sans({subsets:["latin"],variable:"--font-app"});
 export const metadata:Metadata={

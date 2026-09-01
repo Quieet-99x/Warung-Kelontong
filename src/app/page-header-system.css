@@ -1,0 +1,93 @@
+/* Shared rhythm for the green header at the top of every primary page. */
+.hero,.kulakan-hero,.inventory-hero,.cashflow-hero{
+  height:auto;
+  padding-top:var(--page-header-top);
+  padding-inline:var(--page-header-gutter);
+}
+
+.hero{
+  min-height:0;
+  padding-bottom:28px;
+}
+
+.kulakan-hero{
+  min-height:0;
+  padding-bottom:34px;
+  justify-content:flex-start;
+}
+
+.inventory-hero{
+  min-height:0;
+  padding-bottom:28px;
+  justify-content:flex-start;
+}
+
+.cashflow-hero{
+  min-height:0;
+  padding-bottom:28px;
+  justify-content:flex-start;
+}
+
+.brand-row span,.eyebrow{
+  font-size:10px;
+  line-height:1.35;
+  letter-spacing:.14em;
+}
+
+.brand-row h1,.kulakan-hero h1,.inventory-hero h1,.cashflow-hero[data-theme=green]>h1{
+  font-size:var(--page-header-title);
+  line-height:1.2;
+  font-weight:750;
+  letter-spacing:-.025em;
+}
+
+.brand-row>div:nth-child(2){min-width:0;flex:1}
+.brand-row h1{
+  display:-webkit-box;
+  margin-top:3px;
+  overflow:hidden;
+  overflow-wrap:anywhere;
+  -webkit-box-orient:vertical;
+  -webkit-line-clamp:2;
+}
+.settings{flex:0 0 auto}
+.brand-row p,.inventory-hero p{
+  font-size:var(--page-header-body);
+  line-height:1.55;
+}
+
+.kulakan-hero h1{
+  margin:0 0 24px;
+  color:#e2f0eb;
+  letter-spacing:.025em;
+}
+
+.kulakan-hero small{
+  margin-top:16px;
+  font-size:11px;
+  line-height:1.55;
+}
+
+.inventory-hero h1{margin:8px 0 7px}
+.inventory-stats{margin-top:18px}
+
+.cashflow-hero[data-theme=green]>h1{
+  width:100%;
+  margin:0 0 2px;
+  color:#fff;
+}
+
+.hero-finance-summary{margin-top:32px}
+
+@media(min-width:640px){
+  .kulakan-page,.inventory-page,.cashflow-page{
+    min-height:calc(100vh - 48px);
+    margin:24px auto;
+    border-radius:30px;
+    overflow:hidden;
+  }
+}
+
+@media(max-width:390px){
+  :root{--page-header-gutter:18px}
+}
