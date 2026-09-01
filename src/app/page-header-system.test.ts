@@ -31,7 +31,7 @@ describe("shared green page header system", () => {
 
   it("keeps the same comfortable desktop distance from the screen edge", () => {
     expect(headers).toContain("@media(min-width:640px)");
-    expect(headers).toContain(".kulakan-page,.inventory-page,.cashflow-page");
+    expect(headers).toContain(".kasbon-slot>.app-shell,.kulakan-page,.inventory-page,.cashflow-page");
     expect(headers).toContain("margin:24px auto");
   });
 

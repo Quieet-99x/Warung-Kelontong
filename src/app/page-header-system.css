@@ -80,7 +80,7 @@
 .hero-finance-summary{margin-top:32px}
 
 @media(min-width:640px){
-  .kulakan-page,.inventory-page,.cashflow-page{
+  .kasbon-slot>.app-shell,.kulakan-page,.inventory-page,.cashflow-page{
     min-height:calc(100vh - 48px);
     margin:24px auto;
     border-radius:30px;
