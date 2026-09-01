@@ -46,7 +46,7 @@ describe("CashflowDashboard monthly revenue chart", () => {
     expect(screen.getByText(/1 Agustus: Rp/)).toBeInTheDocument();
   });
 
-  it("uses today's turnover statistics as the report hero without extra hero copy", () => {
+  it("keeps only the report headline above the monthly chart", () => {
     const store = {
       ...closingStore,
       closings: [...closingStore.closings, {
@@ -60,21 +60,21 @@ describe("CashflowDashboard monthly revenue chart", () => {
     const hero = document.querySelector(".cashflow-hero") as HTMLElement;
     const chart = hero.querySelector(".revenue-chart-card") as HTMLElement;
     const download = hero.querySelector(".download-financial") as HTMLElement;
-    const copy = hero.querySelector(".cashflow-hero-copy") as HTMLElement;
     const headline = hero.querySelector("h1") as HTMLElement;
     expect(hero.dataset.theme).toBe("green");
-    expect(copy.dataset.theme).toBe("green");
+    expect(hero.firstElementChild).toBe(headline);
     expect(document.querySelectorAll(".revenue-chart-card")).toHaveLength(1);
     expect(document.querySelector(".monthly-cash-card .revenue-chart-card")).not.toBeInTheDocument();
+    expect(headline.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(chart.compareDocumentPosition(download) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(download.compareDocumentPosition(headline) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(headline.textContent).toBe("BUKU KAS & LAPORAN");
-    expect(hero).toHaveTextContent("Omzet hari ini");
-    expect(hero).toHaveTextContent(/Rp\s*125\.000/);
-    expect(hero).not.toHaveTextContent("Kasbon tertagih");
-    expect(hero).toHaveTextContent("Belanja kulakan");
-    expect(hero).not.toHaveTextContent("Buku kas warung");
-    expect(hero).not.toHaveTextContent("Catat omset");
+    expect(hero.querySelector(".cashflow-hero-copy")).not.toBeInTheDocument();
+    expect(hero.querySelector(".cashflow-hero-turnover")).not.toBeInTheDocument();
+    expect(hero.querySelector(".cashflow-hero-stats")).not.toBeInTheDocument();
+    expect(hero).not.toHaveTextContent("Omzet hari ini");
+    expect(hero).not.toHaveTextContent("Belanja kulakan");
+    expect(screen.getByText("BUKU KAS HARI INI")).toBeInTheDocument();
+    expect(screen.getByLabelText("Omset penjualan hari ini")).toHaveValue(125000);
   });
 
   it("keeps the last valid month when the month picker is cleared", async () => {

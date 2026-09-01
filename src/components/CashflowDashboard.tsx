@@ -70,15 +70,9 @@ export default function CashflowDashboard({ debts, receipts, closingStore }: Cas
 
   return <main className="cashflow-page">
     <section className="cashflow-hero" data-theme="green">
+      <h1>BUKU KAS & LAPORAN</h1>
       <RevenueChart month={month} closings={closingStore.closings} type={chartType} onTypeChange={setChartType}/>
       <button className="download-financial" type="button" onClick={download}><Download size={18}/> Download Laporan Bulanan (.csv)</button>
-      <div className="cashflow-hero-copy" data-theme="green">
-        <h1>BUKU KAS & LAPORAN</h1>
-        <div className="cashflow-hero-turnover"><span>Omzet hari ini</span><strong>{compactIDR(manualIncome)}</strong></div>
-        <div className="cashflow-hero-stats">
-          <div><span>Belanja kulakan</span><strong>-{compactIDR(metrics.totalExpenseToday)}</strong></div>
-        </div>
-      </div>
     </section>
 
     <section className="daily-cash-card">
