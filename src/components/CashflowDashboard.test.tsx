@@ -31,6 +31,10 @@ describe("CashflowDashboard monthly revenue chart", () => {
     render(<CashflowDashboard debts={[]} receipts={[]} closingStore={closingStore}/>);
 
     expect(screen.getByRole("img", { name: /Grafik omset harian Agustus 2026/i })).toBeInTheDocument();
+    expect(screen.getByText("PROGRES LAPORAN BULANAN")).toBeInTheDocument();
+    expect(screen.getByText("Omzet Agustus 2026")).toBeInTheDocument();
+    expect(document.querySelector(".revenue-chart-card h2, .revenue-chart-card h3")).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Progres omzet Agustus 2026" })).toBeInTheDocument();
     expect(screen.getByText((_, element) => element?.textContent === "Rp 175.000")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Bar" })).toHaveAttribute("aria-pressed", "true");
 
@@ -53,8 +57,15 @@ describe("CashflowDashboard monthly revenue chart", () => {
     } as DailyClosingStore;
     render(<CashflowDashboard debts={[]} receipts={[]} closingStore={store}/>);
 
-    const hero = document.querySelector(".cashflow-hero");
-    expect(hero?.querySelector("h1")?.textContent).toBe("BUKU KAS & LAPORAN");
+    const hero = document.querySelector(".cashflow-hero") as HTMLElement;
+    const chart = hero.querySelector(".revenue-chart-card") as HTMLElement;
+    const download = hero.querySelector(".download-financial") as HTMLElement;
+    const headline = hero.querySelector("h1") as HTMLElement;
+    expect(document.querySelectorAll(".revenue-chart-card")).toHaveLength(1);
+    expect(document.querySelector(".monthly-cash-card .revenue-chart-card")).not.toBeInTheDocument();
+    expect(chart.compareDocumentPosition(download) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(download.compareDocumentPosition(headline) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(headline.textContent).toBe("BUKU KAS & LAPORAN");
     expect(hero).toHaveTextContent("Omzet hari ini");
     expect(hero).toHaveTextContent(/Rp\s*125\.000/);
     expect(hero).not.toHaveTextContent("Buku kas warung");

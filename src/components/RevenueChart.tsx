@@ -36,9 +36,9 @@ export function RevenueChart({ month, closings, type, onTypeChange }: {
   const describePoints = points.map(point => `${point.day} ${monthName.split(" ")[0]}: ${formatIDR(point.value)}`).join("; ");
   const showDayLabel = (day: number) => day === 1 || day === daysInMonth || day % 5 === 0;
 
-  return <section className="revenue-chart-card">
+  return <section className="revenue-chart-card" aria-label={`Progres omzet ${monthName}`}>
     <div className="chart-heading">
-      <div><span>STATISTIK OMSET</span><h3>Omset harian</h3></div>
+      <div><span>PROGRES LAPORAN BULANAN</span><strong className="chart-title">Omzet {monthName}</strong></div>
       <div className="chart-toggle" aria-label="Jenis grafik">
         <button type="button" aria-pressed={type === "bar"} onClick={() => onTypeChange("bar")}><ChartNoAxesColumnIncreasing size={15}/> Bar</button>
         <button type="button" aria-pressed={type === "line"} onClick={() => onTypeChange("line")}><BarChart3 size={15}/> Line</button>

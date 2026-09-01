@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import InventoryDashboard, { type InventoryStore } from "./InventoryDashboard";
@@ -29,10 +29,18 @@ describe("InventoryDashboard", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/dikurangi 1/i);
   });
 
-  it("adds a low-stock item to the shopping checklist", async () => {
+  it("keeps low-stock and shopping actions as compact icons beside the stock total", async () => {
     const store = createStore();
     render(<InventoryDashboard store={store}/>);
-    await userEvent.click(screen.getByRole("button", { name: /Tambah ke checklist belanja/i }));
+    const card = screen.getByRole("article", { name: /Minyakita 1L/i });
+    const stockBar = within(card).getByLabelText("Sisa stok 2 pcs");
+    const warning = within(card).getByRole("img", { name: "Stok menipis, batas minimum 3 pcs" });
+    const shopping = within(card).getByRole("button", { name: /Tambah Minyakita 1L ke checklist belanja/i });
+
+    expect(stockBar).toContainElement(warning);
+    expect(stockBar).toContainElement(shopping);
+    expect(within(card).queryByText("Tambah ke checklist belanja")).not.toBeInTheDocument();
+    await userEvent.click(shopping);
     expect(store.addToShoppingList).toHaveBeenCalledWith("stock-1");
     expect(screen.getByRole("status")).toHaveTextContent(/ditambahkan/i);
   });

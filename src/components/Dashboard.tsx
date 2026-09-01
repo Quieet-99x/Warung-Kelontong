@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { BookOpenCheck, CheckCircle2, DatabaseBackup, History, ImageUp, Plus, QrCode, Search, Settings2, Trash2, TrendingUp, UsersRound, WalletCards } from "lucide-react";
+import { BookOpenCheck, CheckCircle2, DatabaseBackup, History, ImageUp, Plus, QrCode, Search, Settings2, Trash2, UsersRound, WalletCards } from "lucide-react";
 import Image from "next/image";
 import { DEBTS_KEY, useKasbonStore } from "@/hooks/useKasbonStore";
 import { formatDate, formatIDR, isValidWhatsAppNumber, parseIDRInput } from "@/lib/utils";
@@ -61,9 +61,9 @@ export function DashboardView({ store, todayTurnover = 0, debtPrefill, debtStock
         <button className="settings" onClick={() => setModal({ kind: "settings" })} aria-label="Pengaturan warung"><Settings2 size={19}/></button>
       </div>
       <div className="hero-finance-summary">
-        <div className="daily-turnover-card">
-          <div><span>Omzet hari ini</span><small>Uang masuk dari penjualan</small></div>
-          <TrendingUp size={20}/>
+        <div className="daily-turnover">
+          <span>Omzet hari ini</span>
+          <small>Uang masuk dari penjualan</small>
           <strong>{formatIDR(todayTurnover)}</strong>
         </div>
         <div className="receivable-summary">

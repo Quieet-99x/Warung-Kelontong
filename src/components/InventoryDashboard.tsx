@@ -33,11 +33,15 @@ export default function InventoryDashboard({ store }: { store: InventoryStore })
       <nav className="inventory-filters" aria-label="Filter stok"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Semua <b>{store.inventory.length}</b></button><button className={filter === "low" ? "active" : ""} onClick={() => setFilter("low")}><AlertTriangle size={15}/> Stok menipis <b>{store.lowStock.length}</b></button></nav>
       <div className="inventory-list">{list.map(item => {
         const low = item.currentStock <= item.minStockAlert;
-        return <article className={`inventory-card${low ? " low" : ""}`} key={item.id}>
-          <div className="inventory-card-head"><div className="inventory-icon"><Package size={20}/></div><div><h2>{item.name}</h2><p>Modal terakhir {formatIDR(item.lastCostPrice)} / {item.unit}</p></div><div className="stock-number"><span>SISA</span><strong>{item.currentStock}</strong><small>{item.unit}</small></div></div>
-          {low && <div className="low-stock-alert"><AlertTriangle size={16}/><span><strong>Stok menipis</strong>Batas minimum {item.minStockAlert} {item.unit}</span></div>}
+        return <article className={`inventory-card${low ? " low" : ""}`} key={item.id} aria-label={item.name}>
+          <div className="inventory-card-head"><div className="inventory-icon"><Package size={20}/></div><div><h2>{item.name}</h2><p>Modal terakhir {formatIDR(item.lastCostPrice)} / {item.unit}</p></div><div className="stock-number" aria-label={`Sisa stok ${item.currentStock} ${item.unit}`}>
+            {low && <div className="stock-indicators">
+              <span className="stock-warning-icon" role="img" aria-label={`Stok menipis, batas minimum ${item.minStockAlert} ${item.unit}`}><AlertTriangle aria-hidden="true" size={17}/></span>
+              <button className="shopping-icon" type="button" aria-label={`Tambah ${item.name} ke checklist belanja`} onClick={() => report(store.addToShoppingList(item.id), `${item.name} ditambahkan ke checklist belanja.`)}><ShoppingCart aria-hidden="true" size={17}/></button>
+            </div>}
+            <strong>{item.currentStock}</strong><small>{item.unit}</small>
+          </div></div>
           <div className="inventory-actions"><button onClick={() => report(store.adjustStock(item.id, -1, "Penyesuaian cepat -1"), `Stok ${item.name} dikurangi 1.`)} disabled={item.currentStock < 1}>-1</button><button onClick={() => report(store.adjustStock(item.id, 1, "Penyesuaian cepat +1"), `Stok ${item.name} ditambah 1.`)}>+1</button><button onClick={() => setEdit(item)}><Pencil size={15}/> Edit stok</button></div>
-          {low && <button className="shopping-add" onClick={() => report(store.addToShoppingList(item.id), `${item.name} ditambahkan ke checklist belanja.`)}><ShoppingCart size={16}/> Tambah ke checklist belanja</button>}
         </article>;
       })}{!list.length && <div className="inventory-empty"><PackagePlus size={30}/><h2>{filter === "low" ? "Tidak ada stok menipis" : "Belum ada barang"}</h2><p>{filter === "low" ? "Semua stok berada di atas batas minimum." : "Scan struk kulakan atau tambahkan barang secara manual."}</p></div>}</div>
       <section className="shopping-panel"><div className="inventory-section-title"><ClipboardList size={19}/><div><span>CHECKLIST BELANJA</span><h2>Belanja pasar berikutnya</h2></div></div>{store.shoppingList.length ? store.shoppingList.map(item => <label className={item.checked ? "checked" : ""} key={item.id}><input type="checkbox" checked={item.checked} onChange={() => report(store.toggleShoppingItem(item.id), "Checklist belanja diperbarui.")}/><Check size={15}/><span>{item.itemName}</span></label>) : <p>Barang menipis yang ditambahkan akan muncul di sini.</p>}</section>

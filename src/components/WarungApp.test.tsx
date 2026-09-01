@@ -70,8 +70,9 @@ describe("Warung app navigation", () => {
 
     await waitFor(() => expect(document.querySelector(".hero")).toHaveTextContent(/Rp\s*85\.000/));
     const hero = document.querySelector(".hero") as HTMLElement;
-    const turnover = hero.querySelector(".daily-turnover-card span") as HTMLElement;
+    const turnover = hero.querySelector(".daily-turnover") as HTMLElement;
     const receivable = hero.querySelector(".receivable-summary span") as HTMLElement;
+    expect(hero.querySelector(".daily-turnover-card")).not.toBeInTheDocument();
     expect(turnover).toHaveTextContent("Omzet hari ini");
     expect(receivable).toHaveTextContent("Total piutang aktif");
     expect(turnover.compareDocumentPosition(receivable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
