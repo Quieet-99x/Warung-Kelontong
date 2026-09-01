@@ -1,3 +1,5 @@
+export const INSTALL_DISMISSED_KEY = "buku-warung.install-dismissed";
+
 function waitForWaitingWorker(registration: ServiceWorkerRegistration): Promise<ServiceWorker | null> {
   if (registration.waiting) return Promise.resolve(registration.waiting);
   const installing = registration.installing;

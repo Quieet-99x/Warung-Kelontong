@@ -6,6 +6,8 @@ import { parseStoredDebts, parseStoredStore } from "./storage";
 import { parseStoredPurchases } from "./purchase-storage";
 import { parseStoredDailyClosings } from "./cashflow";
 import { INVENTORY_KEYS, parseStoredInventory, parseStoredShoppingList, parseStoredStockLogs } from "./inventory-storage";
+import { DEBT_DRAFT_KEY, PURCHASE_DRAFT_KEY } from "./form-drafts";
+import { INSTALL_DISMISSED_KEY } from "./pwa-update";
 
 export const STORAGE_KEYS = {
   store: "buku-kasbon.store.v1",
@@ -16,6 +18,19 @@ export const STORAGE_KEYS = {
   stockLogs: INVENTORY_KEYS.logs,
   shoppingList: INVENTORY_KEYS.shoppingList,
 } as const;
+
+export const SESSION_STORAGE_KEYS = {
+  debtDraft: DEBT_DRAFT_KEY,
+  purchaseDraft: PURCHASE_DRAFT_KEY,
+  installDismissed: INSTALL_DISMISSED_KEY,
+} as const;
+
+export const APPLICATION_RESET_SIGNAL_KEY = "buku-warung.reset-signal.v1";
+
+export function broadcastApplicationReset(local: StorageLike) {
+  local.setItem(APPLICATION_RESET_SIGNAL_KEY, JSON.stringify({ resetAt: Date.now() }));
+  local.removeItem(APPLICATION_RESET_SIGNAL_KEY);
+}
 
 export const MAX_CHECKPOINT_BYTES = 5_000_000;
 
@@ -39,6 +54,50 @@ interface StorageLike {
   getItem(key: string): string | null;
   setItem(key: string, value: string): void;
   removeItem(key: string): void;
+}
+
+export function resetApplicationData(local: StorageLike, session: StorageLike): void {
+  const targets = [
+    { storage: local, keys: Object.values(STORAGE_KEYS) },
+    { storage: session, keys: Object.values(SESSION_STORAGE_KEYS) },
+  ];
+  let previous: Array<(typeof targets)[number] & { values: Map<string, string | null> }>;
+  try {
+    previous = targets.map(target => ({
+      ...target,
+      values: new Map(target.keys.map(key => [key, target.storage.getItem(key)])),
+    }));
+  } catch {
+    throw new Error("Reset belum dimulai karena penyimpanan tidak dapat dibaca. Data tidak diubah.");
+  }
+  try {
+    for (const target of previous) {
+      for (const key of target.keys) target.storage.removeItem(key);
+    }
+    const resetVerified = previous.every(target => target.keys.every(key => target.storage.getItem(key) === null));
+    if (!resetVerified) throw new Error("Reset tidak tersimpan lengkap.");
+  } catch {
+    for (const target of previous) {
+      for (const [key, value] of target.values) {
+        try {
+          if (value === null) target.storage.removeItem(key);
+          else target.storage.setItem(key, value);
+        } catch {
+          // Rollback is verified below; never claim safety from this best-effort write alone.
+        }
+      }
+    }
+    let rollbackVerified = false;
+    try {
+      rollbackVerified = previous.every(target => [...target.values].every(([key, value]) => target.storage.getItem(key) === value));
+    } catch {
+      rollbackVerified = false;
+    }
+    if (!rollbackVerified) {
+      throw new Error("Reset gagal dan penyimpanan mungkin tidak konsisten. Jangan lanjut mencatat transaksi sebelum membuat salinan data yang masih terlihat.");
+    }
+    throw new Error("Reset gagal. Seluruh data sebelumnya berhasil dipertahankan.");
+  }
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>

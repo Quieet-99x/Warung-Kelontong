@@ -2,6 +2,7 @@ import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DAILY_CLOSINGS_KEY } from "@/lib/cashflow-storage";
+import { APPLICATION_RESET_SIGNAL_KEY, SESSION_STORAGE_KEYS } from "@/lib/backup";
 import WarungApp from "./WarungApp";
 
 describe("Warung app navigation", () => {
@@ -30,6 +31,20 @@ describe("Warung app navigation", () => {
     await userEvent.type(screen.getByRole("spinbutton", { name: "Total kasbon" }), "10000");
     await userEvent.click(screen.getByRole("button", { name: "Simpan catatan" }));
     expect(localStorage.getItem("buku-kasbon.debts.v1")).toBeNull();
+  });
+
+  it("clears tab-scoped drafts when another tab completes a full reset", async () => {
+    for (const key of Object.values(SESSION_STORAGE_KEYS)) sessionStorage.setItem(key, `draft-${key}`);
+    render(<WarungApp />);
+    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+
+    window.dispatchEvent(new StorageEvent("storage", {
+      key: APPLICATION_RESET_SIGNAL_KEY,
+      newValue: JSON.stringify({ resetAt: Date.now() }),
+      storageArea: localStorage,
+    }));
+
+    await waitFor(() => expect(Object.values(SESSION_STORAGE_KEYS).every(key => sessionStorage.getItem(key) === null)).toBe(true));
   });
 
   it("opens the Kulakan module from bottom navigation", async () => {

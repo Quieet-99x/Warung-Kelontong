@@ -2,14 +2,13 @@
 
 import { Download, RefreshCw, Share2, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { activateWaitingWorker } from "@/lib/pwa-update";
+import { activateWaitingWorker, INSTALL_DISMISSED_KEY } from "@/lib/pwa-update";
 
 interface InstallPromptEvent extends Event {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 }
 
-const INSTALL_DISMISSED_KEY = "buku-warung.install-dismissed";
 const isStandalone = () => typeof window !== "undefined"
   && (window.matchMedia("(display-mode: standalone)").matches
     || ("standalone" in navigator && (navigator as Navigator & { standalone?: boolean }).standalone === true));

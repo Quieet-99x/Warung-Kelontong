@@ -1,7 +1,7 @@
 "use client";
 
 import { BookOpenCheck, Boxes, Landmark, ReceiptText } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useDailyClosingStore } from "@/hooks/useDailyClosingStore";
 import { useKasbonStore } from "@/hooks/useKasbonStore";
 import { usePurchaseStore } from "@/hooks/usePurchaseStore";
@@ -10,6 +10,7 @@ import { useInventoryStore } from "@/hooks/useInventoryStore";
 import { useSingleWriterLock } from "@/hooks/useSingleWriterLock";
 import { calculateDailyMetrics } from "@/lib/cashflow";
 import { DAILY_CLOSINGS_KEY } from "@/lib/cashflow-storage";
+import { APPLICATION_RESET_SIGNAL_KEY, SESSION_STORAGE_KEYS } from "@/lib/backup";
 import type { StockSelection } from "@/types/inventory";
 import CashflowDashboard from "./CashflowDashboard";
 import { DashboardView } from "./Dashboard";
@@ -37,6 +38,16 @@ export default function WarungApp() {
   const today = localDate();
   const metrics = useMemo(() => calculateDailyMetrics(today, kasbonStore.debts, purchaseStore.purchases), [today, kasbonStore.debts, purchaseStore.purchases]);
   const todayTurnover = closingStore.closings.find(closing => closing.date === today)?.manualIncome ?? 0;
+
+  useEffect(() => {
+    const receiveReset = (event: StorageEvent) => {
+      if (event.storageArea !== localStorage || event.key !== APPLICATION_RESET_SIGNAL_KEY || !event.newValue) return;
+      for (const key of Object.values(SESSION_STORAGE_KEYS)) sessionStorage.removeItem(key);
+      window.location.reload();
+    };
+    window.addEventListener("storage", receiveReset);
+    return () => window.removeEventListener("storage", receiveReset);
+  }, []);
 
   const createDebt = (amount: number, stockItems: StockSelection[]) => {
     setDebtPrefill(amount);

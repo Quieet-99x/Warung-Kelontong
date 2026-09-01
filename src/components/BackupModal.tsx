@@ -1,16 +1,18 @@
 "use client";
 
-import { DatabaseBackup, Download, FileSpreadsheet, RotateCcw, Upload } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { DatabaseBackup, Download, FileSpreadsheet, RotateCcw, ShieldAlert, Trash2, Upload } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { DebtItem, StoreProfile } from "@/types";
 import type { Checkpoint } from "@/lib/backup";
 import {
+  broadcastApplicationReset,
   buildCheckpoint,
   buildMonthlyCSV,
   downloadTextFile,
   MAX_CHECKPOINT_BYTES,
   parseCheckpoint,
   readCurrentBackup,
+  resetApplicationData,
   restoreCheckpoint,
 } from "@/lib/backup";
 import { Modal } from "./Modal";
@@ -21,16 +23,25 @@ interface BackupModalProps {
   storeProfile: StoreProfile;
   debts: DebtItem[];
   onRestored: () => void;
+  canReset?: boolean;
 }
 
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 
-export default function BackupModal({ open, onClose, storeProfile, debts, onRestored }: BackupModalProps) {
+export default function BackupModal({ open, onClose, storeProfile, debts, onRestored, canReset = true }: BackupModalProps) {
   const [month, setMonth] = useState(currentMonth);
   const [checkpoint, setCheckpoint] = useState<Checkpoint | null>(null);
   const [currentCounts, setCurrentCounts] = useState<{ debts: number; receipts: number; closings: number; inventory: number } | null>(null);
   const [status, setStatus] = useState<{ kind: "error" | "success"; message: string } | null>(null);
+  const [resetStep, setResetStep] = useState<0 | 1 | 2>(0);
+  const [resetPhrase, setResetPhrase] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const resetHeadingRef = useRef<HTMLHeadingElement>(null);
+  const resetPhraseRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (resetStep === 1) resetHeadingRef.current?.focus();
+    if (resetStep === 2) resetPhraseRef.current?.focus();
+  }, [resetStep]);
   const backupDate = useMemo(() => checkpoint ? new Intl.DateTimeFormat("id-ID", {
     dateStyle: "medium", timeStyle: "short",
   }).format(new Date(checkpoint.backupDate)) : "", [checkpoint]);
@@ -92,7 +103,33 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
     }
   };
 
-  return <Modal open={open} onClose={onClose} title="Pusat Data & Cadangan" subtitle="Pisahkan file laporan dan cadangan pemulihan">
+  const cancelReset = () => {
+    setResetStep(0);
+    setResetPhrase("");
+  };
+  const confirmReset = () => {
+    if (!canReset || resetStep !== 2 || resetPhrase !== "RESET") return;
+    try {
+      resetApplicationData(localStorage, sessionStorage);
+    } catch (reason) {
+      setStatus({ kind: "error", message: reason instanceof Error ? reason.message : "Reset data gagal." });
+      return;
+    }
+    setStatus({ kind: "success", message: "Seluruh data aplikasi berhasil direset. Aplikasi akan memuat ulang." });
+    cancelReset();
+    try {
+      broadcastApplicationReset(localStorage);
+    } catch {
+      window.alert("Data di tab ini berhasil direset, tetapi tab aplikasi lain tidak dapat diberi tahu otomatis. Tutup atau muat ulang semua tab aplikasi lain untuk membersihkan draft di tab tersebut.");
+    }
+    try {
+      onRestored();
+    } catch {
+      setStatus({ kind: "success", message: "Seluruh data aplikasi berhasil direset. Muat ulang halaman secara manual." });
+    }
+  };
+
+  return <Modal open={open} onClose={() => { cancelReset(); onClose(); }} title="Pusat Data & Cadangan" subtitle="Pisahkan file laporan dan cadangan pemulihan">
     <div className="backup-center">
       {status && <div className={`backup-status ${status.kind}`} role={status.kind === "error" ? "alert" : "status"}>{status.message}</div>}
 
@@ -112,6 +149,27 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
           <small>Untuk pindah HP atau memulihkan data. File diperiksa dahulu; data tidak langsung ditimpa.</small>
         </div>
       </section>
+
+      <section className="backup-section reset-zone">
+        <div className="backup-section-title"><ShieldAlert size={20}/><div><span>3. ZONA BERBAHAYA</span><h3>Reset data keseluruhan</h3></div></div>
+        <p>Menghapus profil warung dan QRIS, seluruh kasbon, kulakan, tutup buku, inventori, log stok, checklist, serta draft yang belum disimpan.</p>
+        <button type="button" className="backup-action reset-entry" disabled={!canReset} onClick={() => { setStatus(null); setResetStep(1); }}><Trash2 size={18}/> Reset seluruh data</button>
+        {!canReset && <small>Reset hanya tersedia di tab yang memegang akses tulis. Tutup tab lain lalu muat ulang.</small>}
+      </section>
+
+      {resetStep === 1 && <section className="reset-confirm" aria-label="Persetujuan awal reset data" role="status" aria-live="polite">
+        <div className="reset-warning"><ShieldAlert size={22}/><div><span>TAHAP 1 DARI 2</span><h3 ref={resetHeadingRef} tabIndex={-1}>Reset seluruh data?</h3></div></div>
+        <p>Tindakan ini permanen dan tidak dapat dibatalkan. Seluruh data operasional di perangkat ini akan dihapus. Buat checkpoint lebih dulu bila data mungkin masih dibutuhkan.</p>
+        <button type="button" className="backup-action" onClick={downloadCheckpoint}><Download size={18}/> Buat checkpoint dulu</button>
+        <div className="reset-actions"><button type="button" onClick={cancelReset}>Batal</button><button type="button" className="reset-danger" onClick={() => setResetStep(2)}>Lanjutkan reset</button></div>
+      </section>}
+
+      {resetStep === 2 && <section className="reset-confirm final-reset" aria-label="Persetujuan final reset data" role="status" aria-live="polite">
+        <div className="reset-warning"><ShieldAlert size={22}/><div><span>TAHAP 2 DARI 2</span><h3>Konfirmasi reset permanen</h3></div></div>
+        <p>Ketik <strong>RESET</strong> dengan huruf kapital untuk menyatakan bahwa Anda memahami seluruh data akan dihapus permanen.</p>
+        <label className="reset-phrase"><span>Ketik RESET untuk melanjutkan</span><input ref={resetPhraseRef} autoComplete="off" spellCheck={false} value={resetPhrase} onChange={event => setResetPhrase(event.target.value)} /></label>
+        <div className="reset-actions"><button type="button" onClick={cancelReset}>Batal</button><button type="button" className="reset-danger" disabled={resetPhrase !== "RESET"} onClick={confirmReset}>Reset seluruh data sekarang</button></div>
+      </section>}
 
       <span className="backup-scroll-cue" aria-hidden="true">Geser untuk melihat seluruh opsi</span>
 

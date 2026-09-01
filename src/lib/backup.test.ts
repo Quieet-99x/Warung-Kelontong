@@ -4,7 +4,9 @@ import {
   buildMonthlyCSV,
   parseCheckpoint,
   readCurrentBackup,
+  resetApplicationData,
   restoreCheckpoint,
+  SESSION_STORAGE_KEYS,
   STORAGE_KEYS,
 } from "./backup";
 import type { DebtItem, StoreProfile } from "@/types";
@@ -226,5 +228,68 @@ describe("backup and recap engine", () => {
       [STORAGE_KEYS.debts]: "old-debts",
       [STORAGE_KEYS.receipts]: "old-receipts",
     });
+  });
+
+  it("resets only application-owned local and session keys", () => {
+    const localValues = new Map<string, string>([
+      ...Object.values(STORAGE_KEYS).map(key => [key, `local-${key}`] as const),
+      ["other-app", "keep-local"],
+    ]);
+    const sessionValues = new Map<string, string>([
+      ...Object.values(SESSION_STORAGE_KEYS).map(key => [key, `session-${key}`] as const),
+      ["other-session", "keep-session"],
+    ]);
+    const storage = (values: Map<string, string>) => ({
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => { values.set(key, value); },
+      removeItem: (key: string) => { values.delete(key); },
+    });
+
+    resetApplicationData(storage(localValues), storage(sessionValues));
+
+    expect(Object.values(STORAGE_KEYS).every(key => !localValues.has(key))).toBe(true);
+    expect(Object.values(SESSION_STORAGE_KEYS).every(key => !sessionValues.has(key))).toBe(true);
+    expect(localValues.get("other-app")).toBe("keep-local");
+    expect(sessionValues.get("other-session")).toBe("keep-session");
+  });
+
+  it("does not start reset when the initial snapshot cannot be read", () => {
+    let removals = 0;
+    const unreadable = {
+      getItem: () => { throw new Error("security"); },
+      setItem: () => {},
+      removeItem: () => { removals += 1; },
+    };
+    const session = {
+      getItem: () => null,
+      setItem: () => {},
+      removeItem: () => { removals += 1; },
+    };
+    expect(() => resetApplicationData(unreadable, session)).toThrow(/belum dimulai|tidak diubah/i);
+    expect(removals).toBe(0);
+  });
+
+  it("rolls back every reset key when one removal fails", () => {
+    const localValues = new Map<string, string>(Object.values(STORAGE_KEYS).map(key => [key, `old-${key}`]));
+    const sessionValues = new Map<string, string>(Object.values(SESSION_STORAGE_KEYS).map(key => [key, `old-${key}`]));
+    const snapshot = () => ({ local: Object.fromEntries(localValues), session: Object.fromEntries(sessionValues) });
+    const before = snapshot();
+    let failed = false;
+    const local = {
+      getItem: (key: string) => localValues.get(key) ?? null,
+      setItem: (key: string, value: string) => { localValues.set(key, value); },
+      removeItem: (key: string) => {
+        if (key === STORAGE_KEYS.receipts && !failed) { failed = true; throw new Error("blocked"); }
+        localValues.delete(key);
+      },
+    };
+    const session = {
+      getItem: (key: string) => sessionValues.get(key) ?? null,
+      setItem: (key: string, value: string) => { sessionValues.set(key, value); },
+      removeItem: (key: string) => { sessionValues.delete(key); },
+    };
+
+    expect(() => resetApplicationData(local, session)).toThrow(/berhasil dipertahankan/i);
+    expect(snapshot()).toEqual(before);
   });
 });
