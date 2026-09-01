@@ -152,7 +152,11 @@ export function useInventoryStore(writerEnabled = true) {
   }, [commit]);
 
   const toggleShoppingItem = useCallback((id: string) => commit(inventoryRef.current, logsRef.current, shoppingRef.current.map(item => item.id === id ? { ...item, checked: !item.checked } : item)), [commit]);
+  const removeShoppingItem = useCallback((id: string) => {
+    if (!shoppingRef.current.some(item => item.id === id)) return false;
+    return commit(inventoryRef.current, logsRef.current, shoppingRef.current.filter(item => item.id !== id));
+  }, [commit]);
   const lowStock = useMemo(() => inventory.filter(item => item.currentStock <= item.minStockAlert), [inventory]);
 
-  return { inventory, logs, shoppingList, lowStock, hydrated, storageIssue, addItem, adjustStock, editItem, syncPurchase, deductSale, addToShoppingList, toggleShoppingItem };
+  return { inventory, logs, shoppingList, lowStock, hydrated, storageIssue, addItem, adjustStock, editItem, syncPurchase, deductSale, addToShoppingList, toggleShoppingItem, removeShoppingItem };
 }

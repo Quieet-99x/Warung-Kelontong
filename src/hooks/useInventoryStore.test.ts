@@ -69,6 +69,24 @@ describe("useInventoryStore", () => {
     expect(result.current.inventory[0].currentStock).toBe(2);
   });
 
+  it("removes only the selected shopping item through the atomic inventory bundle", async () => {
+    const shopping = [
+      { id: "shop-1", inventoryItemId: "s1", itemName: "Beras", checked: false, createdAt: "2026-08-31T10:00:00.000Z" },
+      { id: "shop-2", inventoryItemId: "s1", itemName: "Beras cadangan", checked: true, createdAt: "2026-08-31T11:00:00.000Z" },
+    ];
+    localStorage.setItem(INVENTORY_KEYS.inventory, JSON.stringify([item]));
+    localStorage.setItem(INVENTORY_KEYS.logs, "[]");
+    localStorage.setItem(INVENTORY_KEYS.shoppingList, JSON.stringify(shopping));
+    const { result } = renderHook(() => useInventoryStore());
+    await waitFor(() => expect(result.current.hydrated).toBe(true));
+
+    act(() => expect(result.current.removeShoppingItem("shop-1")).toBe(true));
+
+    expect(result.current.shoppingList).toEqual([shopping[1]]);
+    expect(JSON.parse(localStorage.getItem(INVENTORY_KEYS.shoppingList) ?? "[]")).toEqual([shopping[1]]);
+    expect(result.current.inventory).toEqual([item]);
+  });
+
   it("locks further mutations and exposes an inconsistency warning when rollback cannot be verified", async () => {
     const inventoryRaw = JSON.stringify([item]);
     localStorage.setItem(INVENTORY_KEYS.inventory, inventoryRaw);

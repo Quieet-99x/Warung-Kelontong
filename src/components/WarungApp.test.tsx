@@ -71,9 +71,13 @@ describe("Warung app navigation", () => {
     await waitFor(() => expect(document.querySelector(".hero")).toHaveTextContent(/Rp\s*85\.000/));
     const hero = document.querySelector(".hero") as HTMLElement;
     const turnover = hero.querySelector(".daily-turnover") as HTMLElement;
+    const turnoverCopy = turnover.querySelector(".daily-turnover-copy") as HTMLElement;
+    const turnoverValue = turnover.querySelector(":scope > strong") as HTMLElement;
     const receivable = hero.querySelector(".receivable-summary span") as HTMLElement;
     expect(hero.querySelector(".daily-turnover-card")).not.toBeInTheDocument();
-    expect(turnover).toHaveTextContent("Omzet hari ini");
+    expect(turnoverCopy.textContent).toBe("OMZET HARI INI");
+    expect(turnover).not.toHaveTextContent("Uang masuk dari penjualan");
+    expect(turnoverCopy.compareDocumentPosition(turnoverValue) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(receivable).toHaveTextContent("Total piutang aktif");
     expect(turnover.compareDocumentPosition(receivable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
@@ -151,7 +155,7 @@ describe("Warung app navigation", () => {
     await userEvent.selectOptions(await screen.findByRole("combobox", { name: /Tambah barang dari stok/i }), "stock-1");
     await userEvent.clear(screen.getByRole("spinbutton", { name: "Jumlah Minyakita 1L" }));
     await userEvent.type(screen.getByRole("spinbutton", { name: "Jumlah Minyakita 1L" }), "2");
-    await userEvent.click(screen.getByRole("button", { name: /Tambah ke Omset Hari Ini/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Pesanan Selesai" }));
     expect(JSON.parse(localStorage.getItem("warung_inventory") ?? "[]")[0].currentStock).toBe(2);
     expect(JSON.parse(localStorage.getItem("stock_logs") ?? "[]")[0]).toMatchObject({ type: "OUT_CASH_SALE", changeQty: -2 });
   });
@@ -184,7 +188,7 @@ describe("Warung app navigation", () => {
     await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
     await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "14000+26000+12500");
     expect(screen.getAllByText("Rp52.500").length).toBeGreaterThan(0);
-    await userEvent.click(screen.getByRole("button", { name: /Catat Jadi Kasbon/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Tambahkan Kasbon" }));
     expect(screen.getByRole("spinbutton", { name: "Total kasbon" })).toHaveValue(52500);
   });
 
@@ -193,7 +197,7 @@ describe("Warung app navigation", () => {
     await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
     await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "52500");
-    await userEvent.click(screen.getByRole("button", { name: /Tambah ke Omset Hari Ini/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Pesanan Selesai" }));
     await userEvent.click(screen.getByRole("button", { name: "Buku Kas" }));
     expect(screen.getByRole("spinbutton", { name: /Omset penjualan hari ini/i })).toHaveValue(52500);
   });

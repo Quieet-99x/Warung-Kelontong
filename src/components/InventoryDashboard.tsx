@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Check, ClipboardList, History, Package, PackagePlus, Pencil, Plus, Search, ShoppingCart } from "lucide-react";
+import { AlertTriangle, Check, ClipboardList, History, Package, PackagePlus, Pencil, Plus, Search, ShoppingCart, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { useInventoryStore } from "@/hooks/useInventoryStore";
 import { MAX_STOCK_QUANTITY } from "@/lib/inventory-storage";
@@ -15,6 +15,8 @@ export default function InventoryDashboard({ store }: { store: InventoryStore })
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "low">("all");
   const [edit, setEdit] = useState<EditState>(null);
+  const [shoppingDelete, setShoppingDelete] = useState<{ id: string; itemName: string } | null>(null);
+  const [deleteError, setDeleteError] = useState("");
   const [status, setStatus] = useState("");
   const list = useMemo(() => store.inventory.filter(item => {
     const matches = item.name.toLocaleLowerCase("id-ID").includes(search.trim().toLocaleLowerCase("id-ID"));
@@ -44,7 +46,7 @@ export default function InventoryDashboard({ store }: { store: InventoryStore })
           <div className="inventory-actions"><button onClick={() => report(store.adjustStock(item.id, -1, "Penyesuaian cepat -1"), `Stok ${item.name} dikurangi 1.`)} disabled={item.currentStock < 1}>-1</button><button onClick={() => report(store.adjustStock(item.id, 1, "Penyesuaian cepat +1"), `Stok ${item.name} ditambah 1.`)}>+1</button><button onClick={() => setEdit(item)}><Pencil size={15}/> Edit stok</button></div>
         </article>;
       })}{!list.length && <div className="inventory-empty"><PackagePlus size={30}/><h2>{filter === "low" ? "Tidak ada stok menipis" : "Belum ada barang"}</h2><p>{filter === "low" ? "Semua stok berada di atas batas minimum." : "Scan struk kulakan atau tambahkan barang secara manual."}</p></div>}</div>
-      <section className="shopping-panel"><div className="inventory-section-title"><ClipboardList size={19}/><div><span>CHECKLIST BELANJA</span><h2>Belanja pasar berikutnya</h2></div></div>{store.shoppingList.length ? store.shoppingList.map(item => <label className={item.checked ? "checked" : ""} key={item.id}><input type="checkbox" checked={item.checked} onChange={() => report(store.toggleShoppingItem(item.id), "Checklist belanja diperbarui.")}/><Check size={15}/><span>{item.itemName}</span></label>) : <p>Barang menipis yang ditambahkan akan muncul di sini.</p>}</section>
+      <section className="shopping-panel"><div className="inventory-section-title"><ClipboardList size={19}/><div><span>CHECKLIST BELANJA</span><h2>Belanja pasar berikutnya</h2></div></div>{store.shoppingList.length ? store.shoppingList.map(item => <div className={`shopping-row${item.checked ? " checked" : ""}`} key={item.id}><label><input type="checkbox" checked={item.checked} onChange={() => report(store.toggleShoppingItem(item.id), "Checklist belanja diperbarui.")}/><Check size={15}/><span>{item.itemName}</span></label><button className="shopping-delete" type="button" aria-label={`Hapus ${item.itemName} dari checklist belanja`} onClick={() => { setDeleteError(""); setShoppingDelete({ id: item.id, itemName: item.itemName }); }}><Trash2 aria-hidden="true" size={17}/></button></div>) : <p>Barang menipis yang ditambahkan akan muncul di sini.</p>}</section>
       <section className="inventory-log"><div className="inventory-section-title"><History size={19}/><div><span>AKTIVITAS TERBARU</span><h2>Pergerakan stok</h2></div></div>{store.logs.slice(0, 8).map(log => <div key={log.id}><span className={log.changeQty > 0 ? "in" : "out"}>{log.changeQty > 0 ? "+" : ""}{log.changeQty}</span><p><strong>{log.itemName}</strong><small>{log.notes || "Penyesuaian stok"}</small></p></div>)}{!store.logs.length && <p>Belum ada pergerakan stok.</p>}</section>
     </section>
     <InventoryForm key={edit === "new" ? "new" : edit?.id ?? "closed"} state={edit} close={() => setEdit(null)} save={(value) => {
@@ -53,6 +55,9 @@ export default function InventoryDashboard({ store }: { store: InventoryStore })
       report(saved, edit === "new" ? "Barang baru berhasil disimpan." : "Stok fisik berhasil diperbarui.");
       return saved;
     }}/>
+    <Modal open={Boolean(shoppingDelete)} title="Hapus item belanja?" subtitle="Item hanya dihapus dari checklist, bukan dari inventori." onClose={() => { setShoppingDelete(null); setDeleteError(""); }}>
+      {shoppingDelete && <div className="shopping-delete-confirmation">{deleteError && <p className="inventory-status" role="alert">{deleteError}</p>}<p><strong>{shoppingDelete.itemName}</strong> akan dihapus dari checklist belanja.</p><div className="form-actions"><button type="button" onClick={() => { setShoppingDelete(null); setDeleteError(""); }}>Batal</button><button className="delete-confirm" type="button" onClick={() => { const removed = store.removeShoppingItem(shoppingDelete.id); if (!removed) { setDeleteError("Item checklist belum dapat dihapus. Periksa penyimpanan perangkat."); return; } setStatus(`${shoppingDelete.itemName} dihapus dari checklist belanja.`); setShoppingDelete(null); setDeleteError(""); }}>Hapus item</button></div></div>}
+    </Modal>
   </main>;
 }
 

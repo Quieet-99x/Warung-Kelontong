@@ -13,7 +13,7 @@ const createStore = (): InventoryStore => ({
   storageIssue: "",
   addItem: vi.fn(() => true), adjustStock: vi.fn(() => true), editItem: vi.fn(() => true),
   syncPurchase: vi.fn(() => true), deductSale: vi.fn(() => true), addToShoppingList: vi.fn(() => true),
-  toggleShoppingItem: vi.fn(() => true),
+  toggleShoppingItem: vi.fn(() => true), removeShoppingItem: vi.fn(() => true),
 });
 
 describe("InventoryDashboard", () => {
@@ -43,6 +43,34 @@ describe("InventoryDashboard", () => {
     await userEvent.click(shopping);
     expect(store.addToShoppingList).toHaveBeenCalledWith("stock-1");
     expect(screen.getByRole("status")).toHaveTextContent(/ditambahkan/i);
+  });
+
+  it("deletes a shopping item only after confirmation", async () => {
+    const store = createStore();
+    store.shoppingList = [{ id: "shop-1", inventoryItemId: "stock-1", itemName: "Minyakita 1L", checked: false, createdAt: "2026-08-31T10:00:00.000Z" }];
+    render(<InventoryDashboard store={store}/>);
+
+    await userEvent.click(screen.getByRole("button", { name: "Hapus Minyakita 1L dari checklist belanja" }));
+    expect(store.removeShoppingItem).not.toHaveBeenCalled();
+    const dialog = screen.getByRole("dialog", { name: "Hapus item belanja?" });
+    expect(dialog).toHaveTextContent("Minyakita 1L");
+    await userEvent.click(within(dialog).getByRole("button", { name: "Hapus item" }));
+
+    expect(store.removeShoppingItem).toHaveBeenCalledWith("shop-1");
+    expect(screen.getByRole("status")).toHaveTextContent("Minyakita 1L dihapus dari checklist belanja.");
+  });
+
+  it("keeps the delete confirmation open when shopping-list persistence fails", async () => {
+    const store = createStore();
+    store.shoppingList = [{ id: "shop-1", inventoryItemId: "stock-1", itemName: "Minyakita 1L", checked: false, createdAt: "2026-08-31T10:00:00.000Z" }];
+    vi.mocked(store.removeShoppingItem).mockReturnValue(false);
+    render(<InventoryDashboard store={store}/>);
+
+    await userEvent.click(screen.getByRole("button", { name: "Hapus Minyakita 1L dari checklist belanja" }));
+    await userEvent.click(screen.getByRole("button", { name: "Hapus item" }));
+
+    expect(screen.getByRole("dialog", { name: "Hapus item belanja?" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(/belum dapat dihapus/i);
   });
 
   it("shows a save failure inside the active inventory dialog", async () => {

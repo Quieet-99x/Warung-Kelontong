@@ -60,7 +60,10 @@ describe("CashflowDashboard monthly revenue chart", () => {
     const hero = document.querySelector(".cashflow-hero") as HTMLElement;
     const chart = hero.querySelector(".revenue-chart-card") as HTMLElement;
     const download = hero.querySelector(".download-financial") as HTMLElement;
+    const copy = hero.querySelector(".cashflow-hero-copy") as HTMLElement;
     const headline = hero.querySelector("h1") as HTMLElement;
+    expect(hero.dataset.theme).toBe("green");
+    expect(copy.dataset.theme).toBe("green");
     expect(document.querySelectorAll(".revenue-chart-card")).toHaveLength(1);
     expect(document.querySelector(".monthly-cash-card .revenue-chart-card")).not.toBeInTheDocument();
     expect(chart.compareDocumentPosition(download) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
@@ -68,6 +71,8 @@ describe("CashflowDashboard monthly revenue chart", () => {
     expect(headline.textContent).toBe("BUKU KAS & LAPORAN");
     expect(hero).toHaveTextContent("Omzet hari ini");
     expect(hero).toHaveTextContent(/Rp\s*125\.000/);
+    expect(hero).not.toHaveTextContent("Kasbon tertagih");
+    expect(hero).toHaveTextContent("Belanja kulakan");
     expect(hero).not.toHaveTextContent("Buku kas warung");
     expect(hero).not.toHaveTextContent("Catat omset");
   });

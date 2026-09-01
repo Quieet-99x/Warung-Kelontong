@@ -85,13 +85,13 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome, inventory =
           </div>
           <div className={`change-card${shortfall ? " shortfall" : ""}`}><span>{!hasReceived ? "MASUKKAN UANG DITERIMA" : shortfall ? "UANG MASIH KURANG" : "UANG KEMBALIAN"}</span><strong>{compactIDR(shortfall || change)}</strong></div>
           <div className="calculator-actions"><span>AKSI CEPAT</span><div>
-            <button type="button" disabled={!total} onClick={() => setQrisOpen(true)}><QrCode size={17}/> Tampilkan QRIS</button>
-            <button type="button" disabled={!total} onClick={() => { onCreateDebt(total, stockItems); close(false); }}><CreditCard size={17}/> Catat Jadi Kasbon</button>
-            <button type="button" disabled={!total} onClick={() => {
+            <button className="cashier-complete" type="button" disabled={!total} onClick={() => {
               const saved = onAddIncome(total, stockItems);
               setStatus(saved ? `${compactIDR(total)} ditambahkan ke omset hari ini.` : "Transaksi dan stok gagal disimpan. Periksa jumlah stok lalu coba lagi.");
               if (saved) { setExpression(""); setStockItems([]); close(); }
-            }}><PlusCircle size={17}/> Tambah ke Omset Hari Ini</button>
+            }}><PlusCircle size={17}/> Pesanan Selesai</button>
+            <button className="cashier-qris" type="button" disabled={!total} onClick={() => setQrisOpen(true)}><QrCode size={17}/> Tampilkan QRIS</button>
+            <button className="cashier-debt" type="button" disabled={!total} onClick={() => { onCreateDebt(total, stockItems); close(false); }}><CreditCard size={17}/> Tambahkan Kasbon</button>
           </div></div>
           {status && <p className="calculator-status" role="status">{status}</p>}
         </div>

@@ -10,7 +10,22 @@ describe("QuickCalculator", () => {
     await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
     await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "1/3");
     expect(screen.getByRole("alert")).toHaveTextContent(/tidak valid/i);
-    expect(screen.getByRole("button", { name: /Catat Jadi Kasbon/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Tambahkan Kasbon" })).toBeDisabled();
+  });
+
+  it("orders completed order beside QRIS with debt below", async () => {
+    render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => true}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "52500");
+
+    const actions = document.querySelector(".calculator-actions>div") as HTMLElement;
+    const complete = screen.getByRole("button", { name: "Pesanan Selesai" });
+    const qris = screen.getByRole("button", { name: "Tampilkan QRIS" });
+    const debt = screen.getByRole("button", { name: "Tambahkan Kasbon" });
+    expect(complete).toHaveClass("cashier-complete");
+    expect(qris).toHaveClass("cashier-qris");
+    expect(debt).toHaveClass("cashier-debt");
+    expect([...actions.children]).toEqual([complete, qris, debt]);
   });
 
   it("uses payment shortcuts as absolute cash options", async () => {
@@ -49,7 +64,7 @@ describe("QuickCalculator", () => {
     render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={onAddIncome}/>);
     await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
     await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "52500");
-    await userEvent.click(screen.getByRole("button", { name: /Tambah ke Omset/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Pesanan Selesai" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent(/Rp52.500.*ditambahkan/i);
   });
@@ -66,7 +81,7 @@ describe("QuickCalculator", () => {
     render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => false}/>);
     await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
     await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "52500");
-    await userEvent.click(screen.getByRole("button", { name: /Tambah ke Omset/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Pesanan Selesai" }));
     const dialog = screen.getByRole("dialog");
     expect(within(dialog).getByRole("status")).toHaveTextContent(/gagal disimpan/i);
   });
@@ -78,7 +93,7 @@ describe("QuickCalculator", () => {
     render(<QuickCalculator onCreateDebt={() => debtInput.focus()} onAddIncome={() => true}/>);
     await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
     await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "52500");
-    await userEvent.click(screen.getByRole("button", { name: /Catat Jadi Kasbon/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Tambahkan Kasbon" }));
     await waitFor(() => expect(debtInput).toHaveFocus());
   });
 });

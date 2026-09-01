@@ -62,8 +62,7 @@ export function DashboardView({ store, todayTurnover = 0, debtPrefill, debtStock
       </div>
       <div className="hero-finance-summary">
         <div className="daily-turnover">
-          <span>Omzet hari ini</span>
-          <small>Uang masuk dari penjualan</small>
+          <div className="daily-turnover-copy"><span>OMZET HARI INI</span></div>
           <strong>{formatIDR(todayTurnover)}</strong>
         </div>
         <div className="receivable-summary">

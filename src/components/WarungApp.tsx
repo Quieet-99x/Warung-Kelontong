@@ -64,7 +64,7 @@ export default function WarungApp() {
   return <div className="warung-app">
     {writerLock.status === "readonly" && <p className="writer-lock-banner" role="alert">Mode baca saja: aplikasi sedang aktif di tab lain. Tutup tab lain lalu muat ulang halaman ini untuk mencatat transaksi.</p>}
     {writerLock.status === "unsupported" && <p className="writer-lock-banner" role="alert">Mode baca saja: browser ini belum mendukung penguncian data yang aman. Gunakan Chrome, Edge, atau browser terbaru untuk mencatat transaksi.</p>}
-    <div hidden={page !== "kasbon"}><DashboardView store={kasbonStore} todayTurnover={todayTurnover} debtPrefill={debtPrefill} debtStockPrefill={debtStockPrefill} inventoryStore={inventoryStore} onDebtPrefillConsumed={() => { setDebtPrefill(null); setDebtStockPrefill([]); }}/></div>
+    <div className="module-slot kasbon-slot" hidden={page !== "kasbon"}><DashboardView store={kasbonStore} todayTurnover={todayTurnover} debtPrefill={debtPrefill} debtStockPrefill={debtStockPrefill} inventoryStore={inventoryStore} onDebtPrefillConsumed={() => { setDebtPrefill(null); setDebtStockPrefill([]); }}/></div>
     <div hidden={page !== "kulakan"}><KulakanPageView store={purchaseStore} onSavePurchase={savePurchase}/></div>
     <div hidden={page !== "inventory"}><InventoryDashboard store={inventoryStore}/></div>
     <div hidden={page !== "cashflow"}><CashflowDashboard debts={kasbonStore.debts} receipts={purchaseStore.purchases} closingStore={closingStore}/></div>
