@@ -11,13 +11,25 @@ const isRecord = (value: unknown): value is Record<string, unknown> => typeof va
 const isText = (value: unknown): value is string => typeof value === "string" && value.trim().length > 0;
 const isDateTime = (value: unknown): value is string => typeof value === "string" && !Number.isNaN(Date.parse(value));
 const isNonNegative = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= MAX_STOCK_QUANTITY;
+const isStockQuantity = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= -MAX_STOCK_QUANTITY && value <= MAX_STOCK_QUANTITY;
+const isNonNegativeMoney = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+const isBarcode = (value: unknown): value is string => typeof value === "string" && /^[0-9A-Za-z._-]{4,64}$/.test(value.trim());
+const wholesaleUnits = ["Dus", "Renceng", "Pak", "Bal"];
+const isAlternateUnit = (value: unknown) => isRecord(value) && isText(value.id)
+  && wholesaleUnits.includes(value.name as string) && isBarcode(value.barcode)
+  && Number.isSafeInteger(value.conversion) && (value.conversion as number) > 1 && (value.conversion as number) <= MAX_STOCK_QUANTITY
+  && isNonNegativeMoney(value.lastCostPrice) && isNonNegativeMoney(value.sellPrice);
 
 const hasUniqueIds = (values: { id: string }[]) => new Set(values.map(value => value.id)).size === values.length;
 
 const isInventoryItem = (value: unknown): value is InventoryItem => isRecord(value)
-  && isText(value.id) && isText(value.name) && isNonNegative(value.currentStock) && isText(value.unit)
+  && isText(value.id) && isText(value.name) && isStockQuantity(value.currentStock) && isText(value.unit)
   && Number.isSafeInteger(value.lastCostPrice) && (value.lastCostPrice as number) >= 0
-  && isNonNegative(value.minStockAlert) && isDateTime(value.updatedAt);
+  && isNonNegative(value.minStockAlert) && isDateTime(value.updatedAt)
+  && (value.baseBarcode === undefined || isBarcode(value.baseBarcode))
+  && (value.baseSellPrice === undefined || isNonNegativeMoney(value.baseSellPrice))
+  && (value.alternateUnits === undefined || (Array.isArray(value.alternateUnits) && value.alternateUnits.every(isAlternateUnit)
+    && hasUniqueIds(value.alternateUnits as { id: string }[])));
 
 const movementTypes: StockMovementType[] = ["IN_PURCHASE", "OUT_DEBT", "OUT_CASH_SALE", "MANUAL_ADJUST"];
 const isStockLog = (value: unknown): value is StockMovementLog => {
@@ -47,7 +59,8 @@ export const parseStoredInventory = (raw: string): InventoryItem[] | null => {
   const values = parseArray(raw, isInventoryItem);
   if (!values) return null;
   const names = values.map(item => item.name.trim().replace(/\s+/g, " ").toLocaleLowerCase("id-ID"));
-  return new Set(names).size === names.length ? values : null;
+  const barcodes = values.flatMap(item => [item.baseBarcode, ...(item.alternateUnits ?? []).map(unit => unit.barcode)]).filter(Boolean) as string[];
+  return new Set(names).size === names.length && new Set(barcodes).size === barcodes.length ? values : null;
 };
 export const parseStoredStockLogs = (raw: string) => parseArray(raw, isStockLog);
 export const parseStoredShoppingList = (raw: string) => parseArray(raw, isShoppingItem);

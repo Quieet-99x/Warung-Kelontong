@@ -13,7 +13,7 @@ const createStore = (): InventoryStore => ({
   storageIssue: "",
   addItem: vi.fn(() => true), adjustStock: vi.fn(() => true), editItem: vi.fn(() => true),
   syncPurchase: vi.fn(() => true), deductSale: vi.fn(() => true), addToShoppingList: vi.fn(() => true),
-  toggleShoppingItem: vi.fn(() => true), removeShoppingItem: vi.fn(() => true),
+  linkAlternateUnit: vi.fn(() => true), toggleShoppingItem: vi.fn(() => true), removeShoppingItem: vi.fn(() => true),
 });
 
 describe("InventoryDashboard", () => {
@@ -83,5 +83,21 @@ describe("InventoryDashboard", () => {
     await userEvent.click(screen.getByRole("button", { name: "Simpan stok" }));
     expect(dialog).toHaveTextContent(/belum dapat disimpan/i);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+  });
+
+  it("saves base and wholesale barcode mapping from the product form", async () => {
+    const store = createStore();
+    render(<InventoryDashboard store={store}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Barang/i }));
+    await userEvent.type(screen.getByLabelText("Nama barang"), "Indomie");
+    await userEvent.type(screen.getByLabelText("Barcode eceran"), "8998866200223");
+    await userEvent.type(screen.getByLabelText("Harga jual eceran"), "3500");
+    await userEvent.click(screen.getByRole("checkbox", { name: /Punya satuan grosir/i }));
+    await userEvent.type(screen.getByLabelText("Barcode grosir"), "18998866200220");
+    await userEvent.type(screen.getByLabelText("Isi per kemasan"), "40");
+    await userEvent.type(screen.getByLabelText("Harga modal grosir"), "115000");
+    await userEvent.type(screen.getByLabelText("Harga jual grosir"), "130000");
+    await userEvent.click(screen.getByRole("button", { name: "Simpan stok" }));
+    expect(store.addItem).toHaveBeenCalledWith(expect.objectContaining({ baseBarcode: "8998866200223", baseSellPrice: 3500, alternateUnits: [expect.objectContaining({ name: "Dus", barcode: "18998866200220", conversion: 40 })] }));
   });
 });

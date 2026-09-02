@@ -1,8 +1,22 @@
+import { createElement } from "react";
+import { renderToString } from "react-dom/server";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { useSingleWriterLock } from "./useSingleWriterLock";
 
 describe("useSingleWriterLock", () => {
+  it("renders a deterministic checking state during SSR", () => {
+    const navigatorDescriptor = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+    Object.defineProperty(globalThis, "navigator", { configurable: true, value: undefined });
+
+    const LockStatus = () => createElement("span", null, useSingleWriterLock().status);
+    try {
+      expect(renderToString(createElement(LockStatus))).toContain("checking");
+    } finally {
+      if (navigatorDescriptor) Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+    }
+  });
+
   it("holds an exclusive lock until unmount", async () => {
     let releaseRequest!: () => void;
     const request = vi.fn((_name: string, _options: object, callback: (lock: object) => Promise<void>) => {

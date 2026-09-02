@@ -5,7 +5,7 @@ import { hasValidInventoryReferences, INVENTORY_KEYS, MAX_STOCK_QUANTITY, parseS
 import { deductStockFromSale, syncStockFromPurchase } from "@/lib/inventory-sync";
 import { commitStorageTransaction, StorageInconsistentError } from "@/lib/storage-transaction";
 import { newId } from "@/lib/utils";
-import type { InventoryItem, ShoppingListItem, StockMovementLog, StockMovementType, StockSelection } from "@/types/inventory";
+import type { InventoryAlternateUnit, InventoryItem, ShoppingListItem, StockMovementLog, StockMovementType, StockSelection } from "@/types/inventory";
 import type { PurchaseReceipt } from "@/types/receipt";
 
 interface NewInventoryItem {
@@ -14,9 +14,17 @@ interface NewInventoryItem {
   unit: string;
   lastCostPrice: number;
   minStockAlert: number;
+  baseBarcode?: string;
+  baseSellPrice?: number;
+  alternateUnits?: InventoryAlternateUnit[];
 }
 
 const normalizeName = (name: string) => name.trim().replace(/\s+/g, " ").toLocaleLowerCase("id-ID");
+const normalizeBarcode = (barcode?: string) => barcode?.trim() || undefined;
+const validMoney = (value: number | undefined) => value === undefined || (Number.isSafeInteger(value) && value >= 0);
+const validAlternateUnits = (units: InventoryAlternateUnit[] = []) => units.every(unit => unit.id && unit.barcode.trim() && Number.isSafeInteger(unit.conversion) && unit.conversion > 1
+  && Number.isSafeInteger(unit.lastCostPrice) && unit.lastCostPrice >= 0 && Number.isSafeInteger(unit.sellPrice) && unit.sellPrice >= 0);
+const itemBarcodes = (item: Pick<InventoryItem, "baseBarcode" | "alternateUnits">) => [normalizeBarcode(item.baseBarcode), ...(item.alternateUnits ?? []).map(unit => normalizeBarcode(unit.barcode))].filter(Boolean) as string[];
 
 export function useInventoryStore(writerEnabled = true) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
@@ -101,10 +109,13 @@ export function useInventoryStore(writerEnabled = true) {
   const addItem = useCallback((input: NewInventoryItem) => {
     if (!input.name.trim() || !input.unit.trim() || !Number.isFinite(input.currentStock) || input.currentStock < 0 || input.currentStock > MAX_STOCK_QUANTITY
       || !Number.isSafeInteger(input.lastCostPrice) || input.lastCostPrice < 0
-      || !Number.isFinite(input.minStockAlert) || input.minStockAlert < 0 || input.minStockAlert > MAX_STOCK_QUANTITY) return false;
+      || !Number.isFinite(input.minStockAlert) || input.minStockAlert < 0 || input.minStockAlert > MAX_STOCK_QUANTITY
+      || !validMoney(input.baseSellPrice) || !validAlternateUnits(input.alternateUnits)) return false;
     if (inventoryRef.current.some(item => normalizeName(item.name) === normalizeName(input.name))) return false;
+    const barcodes = itemBarcodes(input);
+    if (new Set(barcodes).size !== barcodes.length || inventoryRef.current.some(item => itemBarcodes(item).some(barcode => barcodes.includes(barcode)))) return false;
     const timestamp = new Date().toISOString();
-    return commit([{ ...input, id: newId(), name: input.name.trim(), unit: input.unit.trim(), updatedAt: timestamp }, ...inventoryRef.current], logsRef.current, shoppingRef.current);
+    return commit([{ ...input, id: newId(), name: input.name.trim(), unit: input.unit.trim(), baseBarcode: normalizeBarcode(input.baseBarcode), updatedAt: timestamp }, ...inventoryRef.current], logsRef.current, shoppingRef.current);
   }, [commit]);
 
   const adjustStock = useCallback((itemId: string, changeQty: number, notes: string) => {
@@ -117,16 +128,29 @@ export function useInventoryStore(writerEnabled = true) {
     return commit(nextInventory, [log, ...logsRef.current], shoppingRef.current);
   }, [commit]);
 
-  const editItem = useCallback((itemId: string, patch: Pick<InventoryItem, "name" | "currentStock" | "unit" | "lastCostPrice" | "minStockAlert">) => {
+  const editItem = useCallback((itemId: string, patch: Pick<InventoryItem, "name" | "currentStock" | "unit" | "lastCostPrice" | "minStockAlert" | "baseBarcode" | "baseSellPrice" | "alternateUnits">) => {
     const current = inventoryRef.current.find(item => item.id === itemId);
     if (!current || !patch.name.trim() || !patch.unit.trim() || !Number.isFinite(patch.currentStock) || patch.currentStock < 0 || patch.currentStock > MAX_STOCK_QUANTITY
-      || !Number.isSafeInteger(patch.lastCostPrice) || patch.lastCostPrice < 0 || !Number.isFinite(patch.minStockAlert) || patch.minStockAlert < 0 || patch.minStockAlert > MAX_STOCK_QUANTITY) return false;
+      || !Number.isSafeInteger(patch.lastCostPrice) || patch.lastCostPrice < 0 || !Number.isFinite(patch.minStockAlert) || patch.minStockAlert < 0 || patch.minStockAlert > MAX_STOCK_QUANTITY
+      || !validMoney(patch.baseSellPrice) || !validAlternateUnits(patch.alternateUnits)) return false;
     if (inventoryRef.current.some(item => item.id !== itemId && normalizeName(item.name) === normalizeName(patch.name))) return false;
+    const barcodes = itemBarcodes(patch);
+    if (new Set(barcodes).size !== barcodes.length || inventoryRef.current.some(item => item.id !== itemId && itemBarcodes(item).some(barcode => barcodes.includes(barcode)))) return false;
     const timestamp = new Date().toISOString();
     const changeQty = patch.currentStock - current.currentStock;
-    const next = inventoryRef.current.map(item => item.id === itemId ? { ...item, ...patch, name: patch.name.trim(), unit: patch.unit.trim(), updatedAt: timestamp } : item);
+    const next = inventoryRef.current.map(item => item.id === itemId ? { ...item, ...patch, name: patch.name.trim(), unit: patch.unit.trim(), baseBarcode: normalizeBarcode(patch.baseBarcode), updatedAt: timestamp } : item);
     const nextLogs = changeQty === 0 ? logsRef.current : [{ id: newId(), itemId, itemName: patch.name.trim(), changeQty, type: "MANUAL_ADJUST" as const, date: timestamp, notes: "Edit stok fisik" }, ...logsRef.current];
     return commit(next, nextLogs, shoppingRef.current);
+  }, [commit]);
+
+  const linkAlternateUnit = useCallback((itemId: string, unit: Omit<InventoryAlternateUnit, "id">) => {
+    const item = inventoryRef.current.find(candidate => candidate.id === itemId);
+    const barcode = normalizeBarcode(unit.barcode);
+    if (!item || !barcode || !validAlternateUnits([{ ...unit, id: "candidate", barcode }])
+      || inventoryRef.current.some(candidate => itemBarcodes(candidate).includes(barcode))) return false;
+    const timestamp = new Date().toISOString();
+    const next = inventoryRef.current.map(candidate => candidate.id === itemId ? { ...candidate, alternateUnits: [...(candidate.alternateUnits ?? []), { ...unit, id: newId(), barcode }], updatedAt: timestamp } : candidate);
+    return commit(next, logsRef.current, shoppingRef.current);
   }, [commit]);
 
   const syncPurchase = useCallback((receipt: PurchaseReceipt, extraWrites = new Map<string, string>()) => {
@@ -158,5 +182,5 @@ export function useInventoryStore(writerEnabled = true) {
   }, [commit]);
   const lowStock = useMemo(() => inventory.filter(item => item.currentStock <= item.minStockAlert), [inventory]);
 
-  return { inventory, logs, shoppingList, lowStock, hydrated, storageIssue, addItem, adjustStock, editItem, syncPurchase, deductSale, addToShoppingList, toggleShoppingItem, removeShoppingItem };
+  return { inventory, logs, shoppingList, lowStock, hydrated, storageIssue, addItem, adjustStock, editItem, linkAlternateUnit, syncPurchase, deductSale, addToShoppingList, toggleShoppingItem, removeShoppingItem };
 }

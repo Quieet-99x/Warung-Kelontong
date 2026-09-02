@@ -6,13 +6,24 @@ const log = { id: "l1", itemId: "s1", itemName: "Beras", changeQty: 2, type: "IN
 const shopping = { id: "b1", inventoryItemId: "s1", itemName: "Beras", checked: false, createdAt: "2026-08-31T10:00:00.000Z" };
 
 describe("inventory storage validation", () => {
+  it("accepts legacy items and rejects duplicate barcodes across unit mappings", () => {
+    expect(parseStoredInventory(JSON.stringify([item]))).toEqual([item]);
+    const mapped = {
+      ...item,
+      baseBarcode: "8991000000011",
+      baseSellPrice: 5000,
+      alternateUnits: [{ id: "dus", name: "Dus", barcode: "18991000000018", conversion: 12, lastCostPrice: 50000, sellPrice: 60000 }],
+    };
+    expect(parseStoredInventory(JSON.stringify([mapped]))).toEqual([mapped]);
+    expect(parseStoredInventory(JSON.stringify([mapped, { ...mapped, id: "s2", name: "Beras lain", baseBarcode: "18991000000018", alternateUnits: [] }]))).toBeNull();
+  });
   it("accepts canonical inventory, logs, and shopping list", () => {
     expect(parseStoredInventory(JSON.stringify([item]))).toEqual([item]);
     expect(parseStoredStockLogs(JSON.stringify([log]))).toEqual([log]);
     expect(parseStoredShoppingList(JSON.stringify([shopping]))).toEqual([shopping]);
   });
-  it("rejects negative stock, duplicate IDs or names, invalid movement signs, and invalid dates", () => {
-    expect(parseStoredInventory(JSON.stringify([{ ...item, currentStock: -1 }]))).toBeNull();
+  it("accepts negative stock for opname while rejecting out-of-range stock, duplicates, invalid movements, and invalid dates", () => {
+    expect(parseStoredInventory(JSON.stringify([{ ...item, currentStock: -1 }]))?.[0].currentStock).toBe(-1);
     expect(parseStoredInventory(JSON.stringify([{ ...item, currentStock: 1_000_000_001 }]))).toBeNull();
     expect(parseStoredInventory(JSON.stringify([item, item]))).toBeNull();
     expect(parseStoredInventory(JSON.stringify([item, { ...item, id: "s2", name: "  BERAS  " }]))).toBeNull();

@@ -53,8 +53,17 @@ describe("inventory synchronization", () => {
   });
 
   it("rejects the entire deduction when stock is insufficient", () => {
-    expect(() => deductStockFromSale([{ itemId: item.id, qtySold: 5 }], [item], "OUT_CASH_SALE", "Kasir", "sale-1", options))
-      .toThrow(/stok Minyakita 1L tidak cukup/i);
+    const result = deductStockFromSale([{ itemId: item.id, qtySold: 5 }], [item], "OUT_CASH_SALE", "Kasir", "sale-1", options);
+    expect(result.updatedInventory[0].currentStock).toBe(-1);
+    expect(result.logs[0].changeQty).toBe(-5);
     expect(item.currentStock).toBe(4);
+  });
+
+  it("converts a mapped wholesale purchase into base stock without changing its cash total", () => {
+    const mapped = { ...item, alternateUnits: [{ id: "dus", name: "Dus" as const, barcode: "18990000000001", conversion: 12, lastCostPrice: 120000, sellPrice: 135000 }] };
+    const wholesale = { ...receipt, grandTotal: 240000, items: [{ ...receipt.items[0], itemName: mapped.name, inventoryItemId: mapped.id, barcode: "18990000000001", qty: 2, unit: "Dus", unitConversion: 12, unitPrice: 120000, totalPrice: 240000 }] };
+    const result = syncStockFromPurchase(wholesale, [mapped], [], options);
+    expect(result.updatedInventory[0]).toMatchObject({ currentStock: 28, lastCostPrice: 10000 });
+    expect(result.logs[0]).toMatchObject({ changeQty: 24, itemId: mapped.id });
   });
 });

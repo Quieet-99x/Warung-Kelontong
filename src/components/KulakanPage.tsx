@@ -2,7 +2,7 @@
 
 import imageCompression from "browser-image-compression";
 import { feedback } from "@/lib/feedback";
-import { Camera, ChevronDown, ChevronRight, FilePenLine, LoaderCircle, MessageCircle, PackageOpen, Plus, ReceiptText, Save } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, FilePenLine, LoaderCircle, MessageCircle, PackageOpen, Plus, ReceiptText, Save, ScanBarcode } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePurchaseStore } from "@/hooks/usePurchaseStore";
 import { createPurchase } from "@/lib/purchase";
@@ -11,6 +11,10 @@ import { applyMargin } from "@/lib/receipt";
 import { formatDate, formatIDR } from "@/lib/utils";
 import { clearFormDraft, PURCHASE_DRAFT_KEY, readPurchaseDraft, writeFormDraft } from "@/lib/form-drafts";
 import type { ReceiptExtraction, ReceiptItem } from "@/types/receipt";
+import type { InventoryItem, InventoryAlternateUnit } from "@/types/inventory";
+import { findInventoryByBarcode, purchaseLineFromBarcode } from "@/lib/inventory-barcode";
+import { BarcodeScanner } from "./BarcodeScanner";
+import { Modal } from "./Modal";
 
 type Draft = ReceiptExtraction | null;
 export type PurchaseStore = ReturnType<typeof usePurchaseStore>;
@@ -29,7 +33,7 @@ export default function KulakanPage() {
   return <KulakanPageView store={store}/>;
 }
 
-export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStore; onSavePurchase?: (receipt: ReturnType<typeof createPurchase>) => boolean }) {
+export function KulakanPageView({ store, onSavePurchase, inventory = [], onLinkBarcode }: { store: PurchaseStore; onSavePurchase?: (receipt: ReturnType<typeof createPurchase>) => boolean; inventory?: InventoryItem[]; onLinkBarcode?: (itemId: string, unit: Omit<InventoryAlternateUnit, "id">) => boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const restored = useMemo(() => readPurchaseDraft(), []);
   const draftIdentityRef = useRef<{ id: string; createdAt: string } | null>(restored?.identity ?? null);
@@ -40,6 +44,8 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
   const [scanStage, setScanStage] = useState<"preparing" | "analyzing" | null>(null);
   const [error, setError] = useState("");
   const [expandedPurchaseId, setExpandedPurchaseId] = useState<string | null>(null);
+  const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
+  const [unregisteredBarcode, setUnregisteredBarcode] = useState("");
   const pricedItems = useMemo(() => {
     if (!draft) return [];
     return draft.items.map(item => {
@@ -67,6 +73,18 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
       items: [{ id: crypto.randomUUID(), itemName: "", qty: 1, unit: "", unitPrice: 1, totalPrice: 1 }],
     });
     setError("");
+  };
+
+  const acceptPurchaseBarcode = (barcode: string) => {
+    const resolved = findInventoryByBarcode(inventory, barcode);
+    setBarcodeScannerOpen(false);
+    if (!resolved) { setUnregisteredBarcode(barcode); return; }
+    const line = purchaseLineFromBarcode(resolved.item, resolved.unit, 1);
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60_000;
+    draftIdentityRef.current = { id: crypto.randomUUID(), createdAt: now.toISOString() };
+    setDraft({ merchantName: "Kulakan barcode", purchaseDate: new Date(now.getTime() - offset).toISOString().slice(0, 10), grandTotal: line.totalPrice, items: [line] });
+    setError(`Terdeteksi: ${resolved.item.name} (1 ${resolved.unit.name} = ${resolved.unit.conversion} ${resolved.item.unit})`);
   };
 
   const scan = async (file?: File) => {
@@ -129,6 +147,7 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
         {loading ? <LoaderCircle className="spin" size={20}/> : <Camera size={20}/>} {loading ? "Memproses struk…" : "Pindai struk"}
       </button>
       <button className="manual-purchase-button" type="button" onClick={startManual} disabled={loading || Boolean(draft)}><FilePenLine size={19}/> Input Kulakan Manual</button>
+      <button className="manual-purchase-button" type="button" onClick={() => setBarcodeScannerOpen(true)} disabled={loading || Boolean(draft)}><ScanBarcode size={19}/> Scan Barcode Kemasan</button>
       <small>{draft ? "Simpan atau batalkan draft saat ini sebelum memulai pencatatan baru." : "Maks. ukuran gambar 10 MB · Pastikan tulisan pada struk terang, fokus, dan terbaca jelas."}</small>
     </section>
 
@@ -183,5 +202,20 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
         </article>;
       }) : <div className="empty purchase-empty"><div><ReceiptText size={28}/></div><h3>Belum ada struk kulakan</h3><p>Scan struk pertama untuk mulai membuat rekap modal barang.</p></div>}
     </section>}
+    <BarcodeScanner open={barcodeScannerOpen} title="Scan barcode kulakan" onClose={() => setBarcodeScannerOpen(false)} onDetected={acceptPurchaseBarcode}/>
+    <LinkBarcodeDialog barcode={unregisteredBarcode} inventory={inventory} close={() => setUnregisteredBarcode("")} save={(itemId, unit) => {
+      const saved = onLinkBarcode?.(itemId, unit) ?? false;
+      if (saved) { setUnregisteredBarcode(""); window.setTimeout(() => acceptPurchaseBarcode(unit.barcode), 0); }
+      return saved;
+    }}/>
   </main>;
+}
+
+function LinkBarcodeDialog({ barcode, inventory, close, save }: { barcode: string; inventory: InventoryItem[]; close: () => void; save: (itemId: string, unit: Omit<InventoryAlternateUnit, "id">) => boolean }) {
+  const [error, setError] = useState("");
+  return <Modal open={Boolean(barcode)} title="Barcode belum terdaftar" subtitle={barcode} onClose={close}><form className="form" onSubmit={event => {
+    event.preventDefault(); const data = new FormData(event.currentTarget);
+    const saved = save(String(data.get("itemId")), { name: String(data.get("name")) as InventoryAlternateUnit["name"], barcode, conversion: Number(data.get("conversion")), lastCostPrice: Number(data.get("cost")), sellPrice: Number(data.get("sell")) });
+    if (!saved) setError("Barcode belum dapat ditautkan. Periksa data atau kemungkinan barcode ganda.");
+  }}>{error && <p role="alert" className="inventory-status">{error}</p>}<p className="link-barcode-choice">Daftarkan sebagai produk baru melalui tab Stok, atau tautkan sekarang ke produk yang sudah ada.</p><label className="field"><span>Produk yang sudah ada</span><select name="itemId" required defaultValue=""><option value="" disabled>Pilih produk…</option>{inventory.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="inventory-form-grid"><label className="field"><span>Jenis satuan</span><select name="name"><option>Dus</option><option>Renceng</option><option>Pak</option><option>Bal</option></select></label><label className="field"><span>Isi per kemasan</span><input name="conversion" type="number" min="2" required/></label></div><label className="field"><span>Harga modal kemasan</span><input name="cost" type="number" min="0" required/></label><label className="field"><span>Harga jual kemasan</span><input name="sell" type="number" min="0" required/></label><div className="form-actions"><button type="button" onClick={close}>Produk baru di tab Stok</button><button className="primary" type="submit">Tautkan barcode</button></div></form></Modal>;
 }

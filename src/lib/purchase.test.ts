@@ -8,7 +8,14 @@ const extraction = {
   grandTotal: 30000,
 };
 
-describe("create purchase", () => {
+describe("createPurchase", () => {
+  it("preserves inventory mapping metadata for a wholesale barcode purchase", () => {
+    const result = createPurchase({
+      merchantName: "Grosir", purchaseDate: "2026-09-02", grandTotal: 115000,
+      items: [{ id: "line", itemName: "Indomie", qty: 1, unit: "Dus", unitPrice: 115000, totalPrice: 115000, inventoryItemId: "stock-1", barcode: "18990000000008", unitConversion: 40 }],
+    }, 15, 500, "purchase-1", "2026-09-02T10:00:00.000Z");
+    expect(result.items[0]).toMatchObject({ inventoryItemId: "stock-1", barcode: "18990000000008", unitConversion: 40 });
+  });
   it("validates an edited receipt and adds margin recommendations", () => {
     const purchase = createPurchase(extraction, 15, 500, "r1", "2026-08-30T10:00:00.000Z");
     expect(purchase).toMatchObject({ id: "r1", merchantName: "Grosir Berkah", createdAt: "2026-08-30T10:00:00.000Z" });

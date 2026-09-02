@@ -36,6 +36,10 @@ export function parseReceiptExtraction(value: unknown): ReceiptExtraction {
     if (!Number.isSafeInteger(computedUnitPrice) || !Number.isSafeInteger(unitPrice) || unitPrice <= 0) {
       throw new Error(`Harga item ke-${index + 1} tidak valid`);
     }
+    const inventoryItemId = candidate.inventoryItemId === undefined ? undefined : isText(candidate.inventoryItemId) ? candidate.inventoryItemId.trim() : null;
+    const barcode = candidate.barcode === undefined ? undefined : isText(candidate.barcode) ? candidate.barcode.trim() : null;
+    const unitConversion = candidate.unitConversion === undefined ? undefined : Number.isSafeInteger(candidate.unitConversion) && (candidate.unitConversion as number) >= 1 ? candidate.unitConversion as number : null;
+    if (inventoryItemId === null || barcode === null || unitConversion === null) throw new Error(`Mapping item ke-${index + 1} tidak valid`);
     return {
       id: crypto.randomUUID(),
       itemName: candidate.itemName.trim(),
@@ -43,6 +47,9 @@ export function parseReceiptExtraction(value: unknown): ReceiptExtraction {
       unit: candidate.unit.trim(),
       totalPrice: candidate.totalPrice,
       unitPrice,
+      inventoryItemId,
+      barcode,
+      unitConversion,
     };
   });
   return { merchantName: value.merchantName.trim(), purchaseDate: value.purchaseDate, items, grandTotal: value.grandTotal };

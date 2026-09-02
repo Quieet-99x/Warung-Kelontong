@@ -37,6 +37,16 @@ describe("useInventoryStore", () => {
     expect(result.current.inventory).toEqual([item]);
   });
 
+  it("links an unregistered wholesale barcode to an existing item", async () => {
+    localStorage.setItem(INVENTORY_KEYS.inventory, JSON.stringify([item]));
+    localStorage.setItem(INVENTORY_KEYS.logs, "[]");
+    localStorage.setItem(INVENTORY_KEYS.shoppingList, "[]");
+    const { result } = renderHook(() => useInventoryStore());
+    await waitFor(() => expect(result.current.hydrated).toBe(true));
+    act(() => expect(result.current.linkAlternateUnit("s1", { name: "Dus", barcode: "18990000000001", conversion: 12, lastCostPrice: 150000, sellPrice: 175000 })).toBe(true));
+    expect(result.current.inventory[0].alternateUnits?.[0]).toMatchObject({ name: "Dus", barcode: "18990000000001", conversion: 12 });
+  });
+
   it("keeps an orphan stock-log bundle read-only", async () => {
     localStorage.setItem(INVENTORY_KEYS.inventory, JSON.stringify([item]));
     localStorage.setItem(INVENTORY_KEYS.logs, JSON.stringify([{ id: "l1", itemId: "missing", itemName: "Hilang", changeQty: 1, type: "IN_PURCHASE", sourceId: "r1", date: "2026-08-31T10:00:00.000Z" }]));

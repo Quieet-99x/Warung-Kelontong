@@ -5,12 +5,15 @@ import { useEffect, useState } from "react";
 export type WriterLockStatus = "checking" | "writer" | "readonly" | "unsupported";
 
 export function useSingleWriterLock() {
-  const [status, setStatus] = useState<WriterLockStatus>(() => navigator.locks ? "checking" : "unsupported");
+  const [status, setStatus] = useState<WriterLockStatus>("checking");
 
   useEffect(() => {
     let mounted = true;
     let release: (() => void) | null = null;
-    if (!navigator.locks) return () => { mounted = false; };
+    if (!navigator.locks) {
+      queueMicrotask(() => { if (mounted) setStatus("unsupported"); });
+      return () => { mounted = false; };
+    }
     void navigator.locks.request("warung-kelontong-writer", { ifAvailable: true, mode: "exclusive" }, async lock => {
       if (!lock) {
         if (mounted) setStatus("readonly");

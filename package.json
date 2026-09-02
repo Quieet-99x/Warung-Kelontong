@@ -15,6 +15,7 @@
   "dependencies": {
     "@google/genai": "^2.19.0",
     "browser-image-compression": "^2.0.2",
+    "html5-qrcode": "^2.3.8",
     "lucide-react": "^1.37.0",
     "next": "16.3.3",
     "react": "19.2.8",

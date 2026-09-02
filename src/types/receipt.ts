@@ -6,6 +6,9 @@ export interface ReceiptItem {
   totalPrice: number;
   unitPrice: number;
   recommendedSellPrice?: number;
+  inventoryItemId?: string;
+  barcode?: string;
+  unitConversion?: number;
 }
 
 export interface PurchaseReceipt {

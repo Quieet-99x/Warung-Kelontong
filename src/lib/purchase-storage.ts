@@ -22,7 +22,10 @@ function isReceiptItem(value: unknown): value is ReceiptItem {
     && isText(value.unit)
     && isPositiveMoney(value.totalPrice)
     && isPositiveMoney(value.unitPrice)
-    && (value.recommendedSellPrice === undefined || isPositiveMoney(value.recommendedSellPrice));
+    && (value.recommendedSellPrice === undefined || isPositiveMoney(value.recommendedSellPrice))
+    && (value.inventoryItemId === undefined || isText(value.inventoryItemId))
+    && (value.barcode === undefined || isText(value.barcode))
+    && (value.unitConversion === undefined || (Number.isSafeInteger(value.unitConversion) && (value.unitConversion as number) >= 1));
 }
 
 function isPurchase(value: unknown): value is PurchaseReceipt {

@@ -29,30 +29,34 @@ export function syncStockFromPurchase(
 
   for (const receiptItem of receipt.items) {
     assertPositiveQty(receiptItem.qty);
+    const conversion = receiptItem.unitConversion ?? 1;
+    assertPositiveQty(conversion);
+    const stockQty = receiptItem.qty * conversion;
+    if (!Number.isFinite(stockQty) || stockQty > MAX_STOCK_QUANTITY) throw new Error("Jumlah stok tidak valid.");
     const cleanName = normalizeName(receiptItem.itemName);
-    const existingIndex = updatedInventory.findIndex(item => normalizeName(item.name) === cleanName);
+    const existingIndex = updatedInventory.findIndex(item => item.id === receiptItem.inventoryItemId || normalizeName(item.name) === cleanName);
     const timestamp = now();
     let inventoryItem: InventoryItem;
     if (existingIndex >= 0) {
       const existing = updatedInventory[existingIndex];
       const incomingUnit = receiptItem.unit.trim();
-      if (incomingUnit && incomingUnit.toLocaleLowerCase("id-ID") !== existing.unit.trim().toLocaleLowerCase("id-ID")) {
+      if (conversion === 1 && incomingUnit && incomingUnit.toLocaleLowerCase("id-ID") !== existing.unit.trim().toLocaleLowerCase("id-ID")) {
         throw new Error(`Satuan ${receiptItem.itemName.trim()} berbeda: stok memakai ${existing.unit}, struk memakai ${incomingUnit}.`);
       }
-      if (existing.currentStock + receiptItem.qty > MAX_STOCK_QUANTITY) throw new Error("Jumlah stok melebihi batas aman.");
+      if (existing.currentStock + stockQty > MAX_STOCK_QUANTITY) throw new Error("Jumlah stok melebihi batas aman.");
       inventoryItem = updatedInventory[existingIndex] = {
         ...existing,
-        currentStock: existing.currentStock + receiptItem.qty,
-        lastCostPrice: receiptItem.unitPrice,
+        currentStock: existing.currentStock + stockQty,
+        lastCostPrice: Math.round(receiptItem.unitPrice / conversion),
         updatedAt: timestamp,
       };
     } else {
       inventoryItem = {
         id: id(),
         name: receiptItem.itemName.trim().replace(/\s+/g, " "),
-        currentStock: receiptItem.qty,
+        currentStock: stockQty,
         unit: receiptItem.unit.trim() || "pcs",
-        lastCostPrice: receiptItem.unitPrice,
+        lastCostPrice: Math.round(receiptItem.unitPrice / conversion),
         minStockAlert: 3,
         updatedAt: timestamp,
       };
@@ -60,7 +64,7 @@ export function syncStockFromPurchase(
     }
     logs.push({
       id: id(), itemId: inventoryItem.id, itemName: inventoryItem.name,
-      changeQty: receiptItem.qty, type: "IN_PURCHASE", sourceId: receipt.id,
+      changeQty: stockQty, type: "IN_PURCHASE", sourceId: receipt.id,
       date: timestamp, notes: `Kulakan dari ${receipt.merchantName}`,
     });
   }
@@ -82,10 +86,10 @@ export function deductStockFromSale(
     assertPositiveQty(selection.qtySold);
     aggregated.set(selection.itemId, (aggregated.get(selection.itemId) ?? 0) + selection.qtySold);
   }
-  for (const [itemId, qty] of aggregated) {
+  for (const itemId of aggregated.keys()) {
     const item = currentInventory.find(candidate => candidate.id === itemId);
     if (!item) throw new Error("Barang stok tidak ditemukan.");
-    if (item.currentStock < qty) throw new Error(`Stok ${item.name} tidak cukup. Tersedia ${item.currentStock} ${item.unit}.`);
+
   }
   const timestamp = now();
   const updatedInventory = currentInventory.map(item => {

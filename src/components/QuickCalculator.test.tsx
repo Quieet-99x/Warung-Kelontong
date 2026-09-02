@@ -96,4 +96,18 @@ describe("QuickCalculator", () => {
     await userEvent.click(screen.getByRole("button", { name: "Tambahkan Kasbon" }));
     await waitFor(() => expect(debtInput).toHaveFocus());
   });
+
+  it("adds a scanned wholesale barcode with package price and base-unit stock quantity", async () => {
+    const inventory = [{ id: "i1", name: "Indomie", currentStock: 80, unit: "Pcs", lastCostPrice: 3000, minStockAlert: 10, updatedAt: "2026-09-02T10:00:00.000Z", baseBarcode: "8990000000001", baseSellPrice: 3500, alternateUnits: [{ id: "dus", name: "Dus" as const, barcode: "18990000000008", conversion: 40, lastCostPrice: 115000, sellPrice: 130000 }] }];
+    const onAddIncome = vi.fn(() => true);
+    render(<QuickCalculator inventory={inventory} onCreateDebt={() => {}} onAddIncome={onAddIncome}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Scan barcode barang" }));
+    await userEvent.type(screen.getByLabelText("Nomor barcode"), "18990000000008");
+    await userEvent.click(screen.getByRole("button", { name: "Gunakan barcode" }));
+    expect(screen.getByText("1 Dus × 40 Pcs")).toBeInTheDocument();
+    expect(screen.getAllByText(/Rp\s*130\.000/)).toHaveLength(2);
+    await userEvent.click(screen.getByRole("button", { name: "Pesanan Selesai" }));
+    expect(onAddIncome).toHaveBeenCalledWith(130000, [expect.objectContaining({ itemId: "i1", qtySold: 40, unitName: "Dus", packageQty: 1 })]);
+  });
 });
