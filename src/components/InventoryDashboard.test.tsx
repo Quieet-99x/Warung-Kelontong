@@ -29,18 +29,21 @@ describe("InventoryDashboard", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/dikurangi 1/i);
   });
 
-  it("shows stock information without purchase or selling prices", () => {
+  it("shows stock information with an icon-only barcode scan FAB", () => {
     render(<InventoryDashboard store={createStore()}/>);
     expect(screen.queryByText(/Modal terakhir/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Harga modal/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Harga jual/i)).not.toBeInTheDocument();
+    const scan = screen.getByRole("button", { name: "Scan barcode stok" });
+    expect(scan).toHaveClass("module-scan-fab");
+    expect(scan).toHaveTextContent("");
   });
 
   it("uses a scan-first stock intake for a registered package barcode", async () => {
     const store = createStore();
     store.inventory = [{ ...item, alternateUnits: [{ id: "dus", name: "Dus", barcode: "18990000000008", conversion: 24, lastCostPrice: 0, sellPrice: 0 }] }];
     render(<InventoryDashboard store={store}/>);
-    await userEvent.click(screen.getByRole("button", { name: /Scan barcode kemasan/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Scan barcode stok" }));
     await userEvent.type(screen.getByLabelText("Nomor barcode"), "18990000000008");
     await userEvent.click(screen.getByRole("button", { name: "Gunakan barcode" }));
     expect(screen.getByText("18990000000008")).toHaveClass("scanned-barcode-value");
@@ -54,7 +57,7 @@ describe("InventoryDashboard", () => {
 
   it("shows a detailed stock form for an unregistered barcode", async () => {
     render(<InventoryDashboard store={createStore()}/>);
-    await userEvent.click(screen.getByRole("button", { name: /Scan barcode kemasan/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Scan barcode stok" }));
     await userEvent.type(screen.getByLabelText("Nomor barcode"), "new-barcode");
     await userEvent.click(screen.getByRole("button", { name: "Gunakan barcode" }));
     expect(screen.getByText("new-barcode")).toHaveClass("scanned-barcode-value");

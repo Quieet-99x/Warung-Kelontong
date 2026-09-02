@@ -34,7 +34,6 @@ export default function InventoryDashboard({ store }: { store: InventoryStore })
     <section className="inventory-content">
       {store.storageIssue && <p className="inventory-status" role="alert">{store.storageIssue}</p>}
       {status && <p className="inventory-status" role="status">{status}</p>}
-      <div className="inventory-scan-actions"><button className="stock-scan-trigger" type="button" onClick={() => setScannerOpen(true)}><ScanBarcode size={19}/> Scan barcode kemasan</button></div>
       <div className="inventory-tools"><label><Search size={18}/><input aria-label="Cari nama barang" placeholder="Cari nama barang…" value={search} onChange={event => setSearch(event.target.value)}/></label><button type="button" onClick={() => setEdit("new")}><Plus size={18}/> Barang</button></div>
       <nav className="inventory-filters" aria-label="Filter stok"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Semua <b>{store.inventory.length}</b></button><button className={filter === "low" ? "active" : ""} onClick={() => setFilter("low")}><AlertTriangle size={15}/> Stok menipis <b>{store.lowStock.length}</b></button></nav>
       <div className="inventory-list">{list.map(item => {
@@ -53,6 +52,7 @@ export default function InventoryDashboard({ store }: { store: InventoryStore })
       <section className="shopping-panel"><div className="inventory-section-title"><ClipboardList size={19}/><div><span>CHECKLIST BELANJA</span><h2>Belanja pasar berikutnya</h2></div></div>{store.shoppingList.length ? store.shoppingList.map(item => <div className={`shopping-row${item.checked ? " checked" : ""}`} key={item.id}><label><input type="checkbox" checked={item.checked} onChange={() => report(store.toggleShoppingItem(item.id), "Checklist belanja diperbarui.")}/><Check size={15}/><span>{item.itemName}</span></label><button className="shopping-delete" type="button" aria-label={`Hapus ${item.itemName} dari checklist belanja`} onClick={() => { setDeleteError(""); setShoppingDelete({ id: item.id, itemName: item.itemName }); }}><Trash2 aria-hidden="true" size={17}/></button></div>) : <p>Barang menipis yang ditambahkan akan muncul di sini.</p>}</section>
       <section className="inventory-log"><div className="inventory-section-title"><History size={19}/><div><span>AKTIVITAS TERBARU</span><h2>Pergerakan stok</h2></div></div>{store.logs.slice(0, 8).map(log => <div key={log.id}><span className={log.changeQty > 0 ? "in" : "out"}>{log.changeQty > 0 ? "+" : ""}{log.changeQty}</span><p><strong>{log.itemName}</strong><small>{log.notes || "Penyesuaian stok"}</small></p></div>)}{!store.logs.length && <p>Belum ada pergerakan stok.</p>}</section>
     </section>
+    <button className="module-scan-fab" type="button" aria-label="Scan barcode stok" onClick={() => setScannerOpen(true)}><ScanBarcode aria-hidden="true"/></button>
     <InventoryForm key={edit === "new" ? "new" : edit?.id ?? "closed"} state={edit} close={() => setEdit(null)} save={(value) => {
       const saved = edit === "new" ? store.addItem(value) : edit ? store.editItem(edit.id, value) : false;
       if (saved) setEdit(null);

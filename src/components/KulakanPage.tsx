@@ -119,13 +119,12 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
     <section className="kulakan-hero">
       <h1>PEMINDAI STRUK CERDAS</h1>
       <input ref={inputRef} className="visually-hidden" type="file" accept="image/jpeg,image/png,image/webp" capture="environment" onChange={event => void scan(event.target.files?.[0])}/>
-      <button className="scan-button" onClick={() => inputRef.current?.click()} disabled={loading || Boolean(draft)}>
-        {loading ? <LoaderCircle className="spin" size={20}/> : <Camera size={20}/>} {loading ? "Memproses struk…" : "Pindai struk"}
-      </button>
       <button className="manual-purchase-button" type="button" onClick={startManual} disabled={loading || Boolean(draft)}><FilePenLine size={19}/> Input Kulakan Manual</button>
 
       <small>{draft ? "Simpan atau batalkan draft saat ini sebelum memulai pencatatan baru." : "Maks. ukuran gambar 10 MB · Pastikan tulisan pada struk terang, fokus, dan terbaca jelas."}</small>
     </section>
+
+    <button className="module-scan-fab" type="button" aria-label="Pindai struk" onClick={() => inputRef.current?.click()} disabled={loading || Boolean(draft)}>{loading ? <LoaderCircle className="spin" aria-hidden="true"/> : <Camera aria-hidden="true"/>}</button>
 
     {scanStage && <div className="scan-progress" role="status" aria-live="polite"><LoaderCircle className="spin" size={22}/><div><strong>{scanStage === "preparing" ? "Menyiapkan foto struk…" : "Menganalisis isi struk…"}</strong><span>{scanStage === "preparing" ? "Mengoptimalkan ukuran foto agar proses lebih cepat." : "Membaca toko, barang, jumlah, dan harga. Mohon tunggu."}</span></div></div>}
 

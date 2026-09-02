@@ -52,11 +52,12 @@ describe("Warung app navigation", () => {
     await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Kulakan" }));
     const heading = screen.getByRole("heading", { name: "PEMINDAI STRUK CERDAS" });
-    const scan = screen.getByRole("button", { name: /Pindai struk/i });
+    const scan = screen.getByRole("button", { name: "Pindai struk" });
     const manual = screen.getByRole("button", { name: /Input Kulakan Manual/i });
     const note = screen.getByText(/Maks\. ukuran gambar 10 MB/i);
-    expect(heading.compareDocumentPosition(scan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(scan.compareDocumentPosition(manual) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(scan).toHaveClass("module-scan-fab");
+    expect(scan).toHaveTextContent("");
+    expect(heading.compareDocumentPosition(manual) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(manual.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
