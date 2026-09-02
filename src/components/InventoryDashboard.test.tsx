@@ -29,6 +29,42 @@ describe("InventoryDashboard", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/dikurangi 1/i);
   });
 
+  it("shows stock information without purchase or selling prices", () => {
+    render(<InventoryDashboard store={createStore()}/>);
+    expect(screen.queryByText(/Modal terakhir/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Harga modal/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Harga jual/i)).not.toBeInTheDocument();
+  });
+
+  it("uses a scan-first stock intake for a registered package barcode", async () => {
+    const store = createStore();
+    store.inventory = [{ ...item, alternateUnits: [{ id: "dus", name: "Dus", barcode: "18990000000008", conversion: 24, lastCostPrice: 0, sellPrice: 0 }] }];
+    render(<InventoryDashboard store={store}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Scan barcode kemasan/i }));
+    await userEvent.type(screen.getByLabelText("Nomor barcode"), "18990000000008");
+    await userEvent.click(screen.getByRole("button", { name: "Gunakan barcode" }));
+    expect(screen.getByText("18990000000008")).toHaveClass("scanned-barcode-value");
+    expect(screen.getByLabelText("Pilih barang")).toHaveValue("stock-1");
+    expect(screen.getByLabelText("Satuan masuk")).toHaveValue("Dus");
+    await userEvent.clear(screen.getByLabelText("Jumlah masuk"));
+    await userEvent.type(screen.getByLabelText("Jumlah masuk"), "2");
+    await userEvent.click(screen.getByRole("button", { name: "Tambah ke stok" }));
+    expect(store.adjustStock).toHaveBeenCalledWith("stock-1", 48, expect.stringMatching(/2 Dus.*barcode/i));
+  });
+
+  it("shows a detailed stock form for an unregistered barcode", async () => {
+    render(<InventoryDashboard store={createStore()}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Scan barcode kemasan/i }));
+    await userEvent.type(screen.getByLabelText("Nomor barcode"), "new-barcode");
+    await userEvent.click(screen.getByRole("button", { name: "Gunakan barcode" }));
+    expect(screen.getByText("new-barcode")).toHaveClass("scanned-barcode-value");
+    expect(screen.getByLabelText("Nama barang baru")).toBeInTheDocument();
+    expect(screen.getByLabelText("Jenis kemasan")).toBeInTheDocument();
+    expect(screen.getByLabelText("Isi per kemasan")).toBeInTheDocument();
+    expect(screen.getByLabelText("Satuan dasar")).toBeInTheDocument();
+    expect(screen.getByLabelText("Batas stok minimum")).toBeInTheDocument();
+  });
+
   it("keeps low-stock and shopping actions as compact icons beside the stock total", async () => {
     const store = createStore();
     render(<InventoryDashboard store={store}/>);
@@ -85,19 +121,17 @@ describe("InventoryDashboard", () => {
     expect(screen.getByRole("dialog")).toBeInTheDocument();
   });
 
-  it("saves base and wholesale barcode mapping from the product form", async () => {
+  it("saves stock and barcode mapping without asking for prices", async () => {
     const store = createStore();
     render(<InventoryDashboard store={store}/>);
     await userEvent.click(screen.getByRole("button", { name: /Barang/i }));
     await userEvent.type(screen.getByLabelText("Nama barang"), "Indomie");
     await userEvent.type(screen.getByLabelText("Barcode eceran"), "8998866200223");
-    await userEvent.type(screen.getByLabelText("Harga jual eceran"), "3500");
     await userEvent.click(screen.getByRole("checkbox", { name: /Punya satuan grosir/i }));
     await userEvent.type(screen.getByLabelText("Barcode grosir"), "18998866200220");
     await userEvent.type(screen.getByLabelText("Isi per kemasan"), "40");
-    await userEvent.type(screen.getByLabelText("Harga modal grosir"), "115000");
-    await userEvent.type(screen.getByLabelText("Harga jual grosir"), "130000");
     await userEvent.click(screen.getByRole("button", { name: "Simpan stok" }));
-    expect(store.addItem).toHaveBeenCalledWith(expect.objectContaining({ baseBarcode: "8998866200223", baseSellPrice: 3500, alternateUnits: [expect.objectContaining({ name: "Dus", barcode: "18998866200220", conversion: 40 })] }));
+    expect(screen.queryByText(/Harga modal|Harga jual/i)).not.toBeInTheDocument();
+    expect(store.addItem).toHaveBeenCalledWith(expect.objectContaining({ baseBarcode: "8998866200223", alternateUnits: [expect.objectContaining({ name: "Dus", barcode: "18998866200220", conversion: 40 })] }));
   });
 });

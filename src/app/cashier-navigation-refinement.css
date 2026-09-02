@@ -1,0 +1,146 @@
+.app-bottom-nav {
+  height: 78px;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  overflow: visible;
+}
+
+.app-bottom-nav > button {
+  min-width: 0;
+  padding: 4px 2px;
+  font-size: 9px;
+}
+
+.app-bottom-nav > button > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-bottom-nav .cashier-nav-primary {
+  position: relative;
+  align-self: center;
+  justify-self: center;
+  width: 68px;
+  min-width: 68px;
+  height: 68px;
+  min-height: 68px;
+  margin-top: -28px;
+  padding: 0;
+  border: 0;
+  border-radius: 22px;
+  overflow: visible;
+  background: var(--green);
+  color: #fff;
+  box-shadow: 0 14px 30px #0a49375c;
+}
+
+.app-bottom-nav .cashier-nav-primary > svg {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: currentColor;
+  box-shadow: none;
+  stroke-width: 2.25;
+}
+
+.app-bottom-nav .cashier-nav-primary:focus-visible {
+  outline: 3px solid #73b9a4;
+  outline-offset: 3px;
+}
+
+.debt-fab {
+  position: fixed;
+  z-index: 35;
+  right: max(18px, calc((100vw - 560px) / 2 + 18px));
+  bottom: 94px;
+  width: 56px;
+  height: 56px;
+  border: 0;
+  border-radius: 19px;
+  background: var(--green);
+  color: #fff;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 12px 30px #0a49374d;
+  cursor: pointer;
+}
+
+.cashier-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 9px;
+}
+
+.cashier-total,
+.cashier-summary .change-card {
+  min-height: 110px;
+  padding: 16px 14px;
+  border-radius: 16px;
+  display: grid;
+  align-content: space-between;
+}
+
+.cashier-total {
+  border: 1px solid #bddbce;
+  background: #eef8f3;
+  color: var(--green);
+}
+
+.cashier-total span,
+.cashier-summary .change-card span {
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: .1em;
+}
+
+.cashier-total strong,
+.cashier-summary .change-card strong {
+  font-size: clamp(22px, 6vw, 31px);
+  line-height: 1;
+  letter-spacing: -.04em;
+  overflow-wrap: anywhere;
+}
+
+.cashier-summary .change-card {
+  margin: 0;
+}
+
+.calculator-body {
+  padding-bottom: max(30px, calc(18px + env(safe-area-inset-bottom)));
+}
+
+@media (max-height: 700px) {
+  .cashier-total,
+  .cashier-summary .change-card {
+    min-height: 92px;
+  }
+
+  .calculator-body {
+    gap: 10px;
+  }
+}
+
+@media (max-width: 360px) {
+  .app-bottom-nav > button {
+    font-size: 8px;
+  }
+
+  .app-bottom-nav .cashier-nav-primary {
+    width: 64px;
+    min-width: 64px;
+    height: 64px;
+    min-height: 64px;
+  }
+
+  .cashier-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .cashier-total,
+  .cashier-summary .change-card {
+    min-height: 88px;
+  }
+}

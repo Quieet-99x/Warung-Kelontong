@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DAILY_CLOSINGS_KEY } from "@/lib/cashflow-storage";
@@ -23,7 +23,7 @@ describe("Warung app navigation", () => {
     } });
     render(<WarungApp />);
     expect(await screen.findByRole("alert")).toHaveTextContent(/Mode baca saja.*tab lain/i);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
     await userEvent.type(screen.getByRole("textbox", { name: "Nama pelanggan" }), "Siti");
     await userEvent.type(screen.getByRole("textbox", { name: "Nomor WhatsApp" }), "081234567890");
@@ -36,7 +36,7 @@ describe("Warung app navigation", () => {
   it("clears tab-scoped drafts when another tab completes a full reset", async () => {
     for (const key of Object.values(SESSION_STORAGE_KEYS)) sessionStorage.setItem(key, `draft-${key}`);
     render(<WarungApp />);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
 
     window.dispatchEvent(new StorageEvent("storage", {
       key: APPLICATION_RESET_SIGNAL_KEY,
@@ -49,7 +49,7 @@ describe("Warung app navigation", () => {
 
   it("opens the Kulakan module from bottom navigation", async () => {
     render(<WarungApp />);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Kulakan" }));
     const heading = screen.getByRole("heading", { name: "PEMINDAI STRUK CERDAS" });
     const scan = screen.getByRole("button", { name: /Pindai struk/i });
@@ -58,6 +58,18 @@ describe("Warung app navigation", () => {
     expect(heading.compareDocumentPosition(scan) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(scan.compareDocumentPosition(manual) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(manual.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("places Kasir Cepat as the primary center module", async () => {
+    render(<WarungApp/>);
+    await waitFor(() => expect(screen.getByRole("navigation", { name: "Navigasi utama" })).toBeInTheDocument());
+    const nav = screen.getByRole("navigation", { name: "Navigasi utama" });
+    const buttons = within(nav).getAllByRole("button");
+    expect(buttons.map(button => button.textContent)).toEqual(["Kasbon", "Kulakan", "", "Stok", "Buku Kas"]);
+    expect(buttons[2]).toHaveAccessibleName("Buka kasir cepat");
+    expect(buttons[2]).toHaveClass("cashier-nav-primary");
+    await userEvent.click(buttons[2]);
+    expect(screen.getByRole("dialog", { name: /Kalkulator kasir cepat/i })).toBeInTheDocument();
   });
 
   it("rejects receipt images above the stated 10 MB limit", async () => {
@@ -99,7 +111,7 @@ describe("Warung app navigation", () => {
 
   it("keeps an unfinished debt form when Home navigation changes modules", async () => {
     render(<WarungApp/>);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
     await userEvent.type(screen.getByRole("textbox", { name: "Nama pelanggan" }), "Siti");
     await userEvent.type(screen.getByRole("textbox", { name: "Barang yang diambil" }), "Beras");
@@ -124,7 +136,10 @@ describe("Warung app navigation", () => {
     expect(screen.getByRole("button", { name: /Pindai struk/i })).toBeDisabled();
   });
 
-  it("creates and saves a manual purchase through the inventory pipeline", async () => {
+  it("saves a manual purchase without changing inventory", async () => {
+    localStorage.setItem("warung_inventory", JSON.stringify([{ id: "stock-1", name: "Beras", currentStock: 5, unit: "kg", lastCostPrice: 0, minStockAlert: 2, updatedAt: "2026-08-31T10:00:00.000Z" }]));
+    localStorage.setItem("stock_logs", "[]");
+    localStorage.setItem("warung_shopping_list", "[]");
     render(<WarungApp/>);
     await userEvent.click(await screen.findByRole("button", { name: "Kulakan" }));
     await userEvent.click(screen.getByRole("button", { name: /Input Kulakan Manual/i }));
@@ -135,10 +150,13 @@ describe("Warung app navigation", () => {
     await userEvent.type(screen.getByRole("textbox", { name: "Satuan 1" }), "kg");
     await userEvent.clear(screen.getByRole("spinbutton", { name: "Harga modal 1" }));
     await userEvent.type(screen.getByRole("spinbutton", { name: "Harga modal 1" }), "10000");
+    expect(screen.queryByText(/Rekomendasi jual|Margin laba|Pembulatan harga jual/i)).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /Simpan ke rekap belanja/i }));
     const purchases = JSON.parse(localStorage.getItem("buku-kasbon.purchases.v1") ?? "[]");
     expect(purchases).toHaveLength(1);
     expect(purchases[0]).toMatchObject({ merchantName: "Grosir Sejahtera", grandTotal: 20_000 });
+    expect(JSON.parse(localStorage.getItem("warung_inventory") ?? "[]")[0].currentStock).toBe(5);
+    expect(JSON.parse(localStorage.getItem("stock_logs") ?? "[]")).toEqual([]);
   });
 
   it("opens inventory and shows low-stock items", async () => {
@@ -149,7 +167,7 @@ describe("Warung app navigation", () => {
     localStorage.setItem("stock_logs", "[]");
     localStorage.setItem("warung_shopping_list", "[]");
     render(<WarungApp />);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Stok" }));
     expect(screen.getByRole("heading", { name: /Manajemen stok/i })).toBeInTheDocument();
     expect(screen.getByText("Minyakita 1L")).toBeInTheDocument();
@@ -164,8 +182,8 @@ describe("Warung app navigation", () => {
     localStorage.setItem("stock_logs", "[]");
     localStorage.setItem("warung_shopping_list", "[]");
     render(<WarungApp />);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
-    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: /Buka kasir cepat/i }));
     await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "28000");
     await userEvent.selectOptions(await screen.findByRole("combobox", { name: /Tambah barang dari stok/i }), "stock-1");
     await userEvent.clear(screen.getByRole("spinbutton", { name: "Jumlah Minyakita 1L" }));
@@ -183,7 +201,7 @@ describe("Warung app navigation", () => {
     localStorage.setItem("stock_logs", "[]");
     localStorage.setItem("warung_shopping_list", "[]");
     render(<WarungApp />);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
     await userEvent.type(screen.getByRole("textbox", { name: "Nama pelanggan" }), "Siti");
     await userEvent.type(screen.getByRole("textbox", { name: "Nomor WhatsApp" }), "081234567890");
@@ -199,8 +217,8 @@ describe("Warung app navigation", () => {
 
   it("prefills a new debt from the quick cashier calculator", async () => {
     render(<WarungApp />);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
-    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: /Buka kasir cepat/i }));
     await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "14000+26000+12500");
     expect(screen.getAllByText("Rp52.500").length).toBeGreaterThan(0);
     await userEvent.click(screen.getByRole("button", { name: "Tambahkan Kasbon" }));
@@ -209,8 +227,8 @@ describe("Warung app navigation", () => {
 
   it("adds a cashier total to today's omzet without reloading", async () => {
     render(<WarungApp />);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
-    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
+    await userEvent.click(screen.getByRole("button", { name: /Buka kasir cepat/i }));
     await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "52500");
     await userEvent.click(screen.getByRole("button", { name: "Pesanan Selesai" }));
     await userEvent.click(screen.getByRole("button", { name: "Buku Kas" }));
@@ -219,7 +237,7 @@ describe("Warung app navigation", () => {
 
   it("saves today's closing to local storage", async () => {
     render(<WarungApp />);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Buku Kas" }));
     await waitFor(() => expect(screen.getByRole("spinbutton", { name: /Omset penjualan hari ini/i })).toBeInTheDocument());
     await userEvent.clear(screen.getByRole("spinbutton", { name: /Omset penjualan hari ini/i }));

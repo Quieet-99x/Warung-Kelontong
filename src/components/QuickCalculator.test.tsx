@@ -28,15 +28,16 @@ describe("QuickCalculator", () => {
     expect([...actions.children]).toEqual([complete, qris, debt]);
   });
 
-  it("uses payment shortcuts as absolute cash options", async () => {
+  it("removes cash shortcuts and places the payment summary after buyer cash", async () => {
     render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => true}/>);
     await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
     await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "52500");
-    expect(screen.queryByRole("button", { name: /\+50rb/i })).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "50rb" }));
-    expect(screen.getByRole("textbox", { name: /Uang diterima pembeli/i })).toHaveValue("50000");
+    expect(screen.queryByText("SHORTCUT UANG DITERIMA")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "50rb" })).not.toBeInTheDocument();
+    await userEvent.type(screen.getByRole("textbox", { name: "Uang pembeli" }), "50000");
     expect(screen.getByText("UANG MASIH KURANG")).toBeInTheDocument();
     expect(screen.getByText("Rp2.500")).toBeInTheDocument();
+    expect(screen.getByText("TOTAL BELANJA").compareDocumentPosition(screen.getByText("UANG MASIH KURANG")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("uses comma, spaces, and a dash directly without an operator shortcut bar", async () => {
@@ -97,17 +98,23 @@ describe("QuickCalculator", () => {
     await waitFor(() => expect(debtInput).toHaveFocus());
   });
 
-  it("adds a scanned wholesale barcode with package price and base-unit stock quantity", async () => {
-    const inventory = [{ id: "i1", name: "Indomie", currentStock: 80, unit: "Pcs", lastCostPrice: 3000, minStockAlert: 10, updatedAt: "2026-09-02T10:00:00.000Z", baseBarcode: "8990000000001", baseSellPrice: 3500, alternateUnits: [{ id: "dus", name: "Dus" as const, barcode: "18990000000008", conversion: 40, lastCostPrice: 115000, sellPrice: 130000 }] }];
-    const onAddIncome = vi.fn(() => true);
-    render(<QuickCalculator inventory={inventory} onCreateDebt={() => {}} onAddIncome={onAddIncome}/>);
+  it("keeps barcode scanning out of the cashier workflow", async () => {
+    render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => true}/>);
     await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
-    await userEvent.click(screen.getByRole("button", { name: "Scan barcode barang" }));
-    await userEvent.type(screen.getByLabelText("Nomor barcode"), "18990000000008");
-    await userEvent.click(screen.getByRole("button", { name: "Gunakan barcode" }));
-    expect(screen.getByText("1 Dus × 40 Pcs")).toBeInTheDocument();
-    expect(screen.getAllByText(/Rp\s*130\.000/)).toHaveLength(2);
-    await userEvent.click(screen.getByRole("button", { name: "Pesanan Selesai" }));
-    expect(onAddIncome).toHaveBeenCalledWith(130000, [expect.objectContaining({ itemId: "i1", qtySold: 40, unitName: "Dus", packageQty: 1 })]);
+    expect(screen.queryByRole("button", { name: /Scan barcode/i })).not.toBeInTheDocument();
+  });
+
+  it("orders the simplified cashier workflow", async () => {
+    render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => true}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    const total = screen.getByRole("textbox", { name: "Total belanjaan" });
+    const stock = screen.getByText("Barang dari stok");
+    const buyerCash = screen.getByRole("textbox", { name: "Uang pembeli" });
+    const summary = screen.getByText("TOTAL BELANJA");
+    const actions = screen.getByText("AKSI CEPAT");
+    expect(total.compareDocumentPosition(stock) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(stock.compareDocumentPosition(buyerCash) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(buyerCash.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(summary.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

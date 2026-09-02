@@ -1,10 +1,10 @@
-import { applyMargin, parseReceiptExtraction } from "./receipt";
+import { parseReceiptExtraction } from "./receipt";
 import type { PurchaseReceipt } from "@/types/receipt";
 
 export function createPurchase(
   value: unknown,
-  marginPercent: number,
-  rounding: 500 | 1000,
+  _marginPercent: number,
+  _rounding: 500 | 1000,
   id = crypto.randomUUID(),
   createdAt = new Date().toISOString(),
 ): PurchaseReceipt {
@@ -24,7 +24,11 @@ export function createPurchase(
   return {
     ...extraction,
     id,
-    items: applyMargin(reconciledItems, marginPercent, rounding),
+    items: reconciledItems.map(item => {
+      const purchaseItem = { ...item };
+      delete purchaseItem.recommendedSellPrice;
+      return purchaseItem;
+    }),
     grandTotal,
     createdAt,
   };

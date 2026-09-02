@@ -16,10 +16,10 @@ describe("createPurchase", () => {
     }, 15, 500, "purchase-1", "2026-09-02T10:00:00.000Z");
     expect(result.items[0]).toMatchObject({ inventoryItemId: "stock-1", barcode: "18990000000008", unitConversion: 40 });
   });
-  it("validates an edited receipt and adds margin recommendations", () => {
+  it("validates an edited receipt without adding selling recommendations", () => {
     const purchase = createPurchase(extraction, 15, 500, "r1", "2026-08-30T10:00:00.000Z");
-    expect(purchase).toMatchObject({ id: "r1", merchantName: "Grosir Berkah", createdAt: "2026-08-30T10:00:00.000Z" });
-    expect(purchase.items[0].recommendedSellPrice).toBe(17500);
+    expect(purchase).toMatchObject({ id: "r1", merchantName: "Grosir Berkah", grandTotal: 30000 });
+    expect(purchase.items[0].recommendedSellPrice).toBeUndefined();
   });
 
   it("reconciles edited quantities, unit prices, line totals, and grand total", () => {

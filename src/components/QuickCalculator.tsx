@@ -1,36 +1,39 @@
 "use client";
 
-import { Calculator, CreditCard, ScanBarcode, PlusCircle, QrCode, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Calculator, CreditCard, PlusCircle, QrCode, X } from "lucide-react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { evaluateCashierExpression } from "@/lib/cashflow";
 import { formatIDR, parseIDRInput } from "@/lib/utils";
-import { feedback } from "@/lib/feedback";
-import { addBarcodeSale, findInventoryByBarcode } from "@/lib/inventory-barcode";
 import type { InventoryItem, StockSelection } from "@/types/inventory";
 import type { StoreProfile } from "@/types";
 import { StockPicker } from "./StockPicker";
 import QRISModal from "./QRISModal";
-import { BarcodeScanner } from "./BarcodeScanner";
+
 
 interface QuickCalculatorProps {
   onCreateDebt: (amount: number, stockItems: StockSelection[]) => void;
   onAddIncome: (amount: number, stockItems: StockSelection[]) => boolean;
   inventory?: InventoryItem[];
   store?: StoreProfile;
+  trigger?: "standalone" | "external";
+}
+
+export interface QuickCalculatorHandle {
+  open: () => void;
 }
 
 const compactIDR = (amount: number) => formatIDR(amount).replace(/\s/g, "");
 
 const fallbackStore: StoreProfile = { storeName: "Warung", ownerName: "Pemilik Warung" };
 
-export default function QuickCalculator({ onCreateDebt, onAddIncome, inventory = [], store = fallbackStore }: QuickCalculatorProps) {
+const QuickCalculator = forwardRef<QuickCalculatorHandle, QuickCalculatorProps>(function QuickCalculator({ onCreateDebt, onAddIncome, inventory = [], store = fallbackStore, trigger = "standalone" }, ref) {
   const [open, setOpen] = useState(false);
   const [expression, setExpression] = useState("");
   const [received, setReceived] = useState("");
   const [status, setStatus] = useState("");
   const [stockItems, setStockItems] = useState<StockSelection[]>([]);
   const [qrisOpen, setQrisOpen] = useState(false);
-  const [scannerOpen, setScannerOpen] = useState(false);
+
   const fabRef = useRef<HTMLButtonElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -69,27 +72,25 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome, inventory =
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [close, open]);
 
-  const setQuickCash = (amount: number) => { feedback.triggerHaptic(10); setReceived(String(amount)); };
-  const openCalculator = () => { setStatus(""); setOpen(true); };
+  const openCalculator = useCallback(() => { setStatus(""); setOpen(true); }, []);
+
+  useImperativeHandle(ref, () => ({ open: openCalculator }), [openCalculator]);
 
   return <>
-    <button ref={fabRef} className="calculator-fab" type="button" aria-label="Buka kalkulator kasir" onClick={openCalculator}><Calculator size={23}/></button>
+    {trigger === "standalone" && <button ref={fabRef} className="calculator-fab" type="button" aria-label="Buka kalkulator kasir" onClick={openCalculator}><Calculator size={23}/></button>}
     {status && !open && <p className="calculator-toast" role="status">{status}</p>}
     {open && !qrisOpen && <div className="calculator-backdrop" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) close(); }}>
       <section ref={panelRef} className="calculator-panel" role="dialog" aria-modal="true" aria-label="Kalkulator kasir cepat">
         <header><div><span>KASIR CEPAT</span><h2><Calculator size={20}/> Kalkulator & Kembalian</h2></div><button type="button" aria-label="Tutup kalkulator" onClick={() => close()}><X size={20}/></button></header>
         <div className="calculator-body">
-          <label className="cashier-field"><span>Total belanjaan</span><input ref={inputRef} aria-label="Total belanjaan" aria-invalid={Boolean(calculation.error)} aria-describedby={calculation.error ? "cashier-expression-error" : "cashier-input-help"} value={expression} onChange={event => setExpression(event.target.value)} placeholder="14.000, 26.000 12.500 - 5.000" inputMode="decimal" autoComplete="off"/><small id="cashier-input-help">Nominal manual dan harga barang hasil scan dijumlahkan otomatis.</small><strong>{compactIDR(effectiveTotal)}</strong></label>
+          <label className="cashier-field"><span>Total belanjaan</span><input ref={inputRef} aria-label="Total belanjaan" aria-invalid={Boolean(calculation.error)} aria-describedby={calculation.error ? "cashier-expression-error" : "cashier-input-help"} value={expression} onChange={event => setExpression(event.target.value)} placeholder="14.000, 26.000 12.500 - 5.000" inputMode="decimal" autoComplete="off"/><small id="cashier-input-help">Pisahkan nominal dengan koma atau spasi. Gunakan tanda minus untuk diskon.</small></label>
           {calculation.error && <p id="cashier-expression-error" className="calculator-error" role="alert">{calculation.error}</p>}
-          <label className="cashier-field"><span>Uang diterima pembeli</span><input aria-label="Uang diterima pembeli" value={received} onChange={event => setReceived(event.target.value)} placeholder="Rp 100.000" inputMode="numeric"/></label>
-          <button className="barcode-scan-trigger" type="button" onClick={() => setScannerOpen(true)}><ScanBarcode size={18}/> Scan barcode barang</button>
           <StockPicker inventory={inventory} value={stockItems} onChange={setStockItems}/>
-          <span className="shortcut-label">SHORTCUT UANG DITERIMA</span>
-          <div className="cash-shortcuts" aria-label="Pilihan uang cepat">
-            <button type="button" onClick={() => setQuickCash(effectiveTotal)} disabled={!effectiveTotal}>Pas</button>
-            {[10_000, 20_000, 50_000, 100_000].map(value => <button type="button" key={value} onClick={() => setQuickCash(value)} disabled={!effectiveTotal}>{value / 1000}rb</button>)}
+          <label className="cashier-field"><span>Uang pembeli</span><input aria-label="Uang pembeli" value={received} onChange={event => setReceived(event.target.value)} placeholder="Rp 100.000" inputMode="numeric"/></label>
+          <div className="cashier-summary">
+            <div className="cashier-total"><span>TOTAL BELANJA</span><strong>{compactIDR(effectiveTotal)}</strong></div>
+            <div className={`change-card${shortfall ? " shortfall" : ""}`}><span>{!hasReceived ? "KEMBALIAN" : shortfall ? "UANG MASIH KURANG" : "UANG KEMBALIAN"}</span><strong>{compactIDR(shortfall || change)}</strong></div>
           </div>
-          <div className={`change-card${shortfall ? " shortfall" : ""}`}><span>{!hasReceived ? "MASUKKAN UANG DITERIMA" : shortfall ? "UANG MASIH KURANG" : "UANG KEMBALIAN"}</span><strong>{compactIDR(shortfall || change)}</strong></div>
           <div className="calculator-actions"><span>AKSI CEPAT</span><div>
             <button className="cashier-complete" type="button" disabled={!effectiveTotal} onClick={() => {
               const saved = onAddIncome(effectiveTotal, stockItems);
@@ -103,14 +104,9 @@ export default function QuickCalculator({ onCreateDebt, onAddIncome, inventory =
         </div>
       </section>
     </div>}
-    <BarcodeScanner open={scannerOpen} title="Scan barcode barang" onClose={() => setScannerOpen(false)} onDetected={barcode => {
-      const resolved = findInventoryByBarcode(inventory, barcode);
-      if (!resolved) { setStatus("Barcode belum terdaftar. Tautkan melalui menu Stok."); setScannerOpen(false); return; }
-      const added = addBarcodeSale(stockItems, resolved.item, resolved.unit);
-      setStockItems(added.selection);
-      setStatus(`${resolved.item.name} · 1 ${resolved.unit.name} ditambahkan.`);
-      setScannerOpen(false);
-    }}/>
+
     <QRISModal open={qrisOpen} onClose={() => setQrisOpen(false)} store={store} amount={effectiveTotal}/>
   </>;
-}
+});
+
+export default QuickCalculator;

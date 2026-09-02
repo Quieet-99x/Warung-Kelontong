@@ -2,19 +2,16 @@
 
 import imageCompression from "browser-image-compression";
 import { feedback } from "@/lib/feedback";
-import { Camera, ChevronDown, ChevronRight, FilePenLine, LoaderCircle, MessageCircle, PackageOpen, Plus, ReceiptText, Save, ScanBarcode } from "lucide-react";
+import { Camera, ChevronDown, ChevronRight, FilePenLine, LoaderCircle, MessageCircle, PackageOpen, Plus, ReceiptText, Save } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { usePurchaseStore } from "@/hooks/usePurchaseStore";
 import { createPurchase } from "@/lib/purchase";
 import { buildPurchaseWhatsAppUrl } from "@/lib/purchase-whatsapp";
-import { applyMargin } from "@/lib/receipt";
+
 import { formatDate, formatIDR } from "@/lib/utils";
 import { clearFormDraft, PURCHASE_DRAFT_KEY, readPurchaseDraft, writeFormDraft } from "@/lib/form-drafts";
 import type { ReceiptExtraction, ReceiptItem } from "@/types/receipt";
-import type { InventoryItem, InventoryAlternateUnit } from "@/types/inventory";
-import { findInventoryByBarcode, purchaseLineFromBarcode } from "@/lib/inventory-barcode";
-import { BarcodeScanner } from "./BarcodeScanner";
-import { Modal } from "./Modal";
+
 
 type Draft = ReceiptExtraction | null;
 export type PurchaseStore = ReturnType<typeof usePurchaseStore>;
@@ -33,34 +30,24 @@ export default function KulakanPage() {
   return <KulakanPageView store={store}/>;
 }
 
-export function KulakanPageView({ store, onSavePurchase, inventory = [], onLinkBarcode }: { store: PurchaseStore; onSavePurchase?: (receipt: ReturnType<typeof createPurchase>) => boolean; inventory?: InventoryItem[]; onLinkBarcode?: (itemId: string, unit: Omit<InventoryAlternateUnit, "id">) => boolean }) {
+export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStore; onSavePurchase?: (receipt: ReturnType<typeof createPurchase>) => boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const restored = useMemo(() => readPurchaseDraft(), []);
   const draftIdentityRef = useRef<{ id: string; createdAt: string } | null>(restored?.identity ?? null);
   const [draft, setDraft] = useState<Draft>(restored?.draft ?? null);
-  const [margin, setMargin] = useState(restored?.margin ?? 15);
-  const [rounding, setRounding] = useState<500 | 1000>(restored?.rounding ?? 500);
+
   const [loading, setLoading] = useState(false);
   const [scanStage, setScanStage] = useState<"preparing" | "analyzing" | null>(null);
   const [error, setError] = useState("");
   const [expandedPurchaseId, setExpandedPurchaseId] = useState<string | null>(null);
-  const [barcodeScannerOpen, setBarcodeScannerOpen] = useState(false);
-  const [unregisteredBarcode, setUnregisteredBarcode] = useState("");
-  const pricedItems = useMemo(() => {
-    if (!draft) return [];
-    return draft.items.map(item => {
-      try { return applyMargin([item], margin, rounding)[0]; }
-      catch { return { ...item, recommendedSellPrice: 0 }; }
-    });
-  }, [draft, margin, rounding]);
-  const reviewedTotal = useMemo(() => pricedItems.reduce((total, item) => total + item.qty * item.unitPrice, 0), [pricedItems]);
+  const reviewedTotal = useMemo(() => draft?.items.reduce((total, item) => total + item.qty * item.unitPrice, 0) ?? 0, [draft]);
 
   useEffect(() => {
     if (!draft) return;
     const identity = draftIdentityRef.current ?? { id: crypto.randomUUID(), createdAt: new Date().toISOString() };
     draftIdentityRef.current = identity;
-    writeFormDraft(PURCHASE_DRAFT_KEY, { draft, margin, rounding, identity });
-  }, [draft, margin, rounding]);
+    writeFormDraft(PURCHASE_DRAFT_KEY, { draft, margin: 0, rounding: 500, identity });
+  }, [draft]);
 
   const startManual = () => {
     const now = new Date();
@@ -75,17 +62,6 @@ export function KulakanPageView({ store, onSavePurchase, inventory = [], onLinkB
     setError("");
   };
 
-  const acceptPurchaseBarcode = (barcode: string) => {
-    const resolved = findInventoryByBarcode(inventory, barcode);
-    setBarcodeScannerOpen(false);
-    if (!resolved) { setUnregisteredBarcode(barcode); return; }
-    const line = purchaseLineFromBarcode(resolved.item, resolved.unit, 1);
-    const now = new Date();
-    const offset = now.getTimezoneOffset() * 60_000;
-    draftIdentityRef.current = { id: crypto.randomUUID(), createdAt: now.toISOString() };
-    setDraft({ merchantName: "Kulakan barcode", purchaseDate: new Date(now.getTime() - offset).toISOString().slice(0, 10), grandTotal: line.totalPrice, items: [line] });
-    setError(`Terdeteksi: ${resolved.item.name} (1 ${resolved.unit.name} = ${resolved.unit.conversion} ${resolved.item.unit})`);
-  };
 
   const scan = async (file?: File) => {
     if (!file) return;
@@ -126,8 +102,8 @@ export function KulakanPageView({ store, onSavePurchase, inventory = [], onLinkB
     try {
       const identity = draftIdentityRef.current ?? { id: crypto.randomUUID(), createdAt: new Date().toISOString() };
       draftIdentityRef.current = identity;
-      const receipt = createPurchase(draft, margin, rounding, identity.id, identity.createdAt);
-      if (!(onSavePurchase ?? store.savePurchase)(receipt)) throw new Error("Struk dan stok belum dapat disimpan. Periksa nama barang, satuan, dan penyimpanan perangkat.");
+      const receipt = createPurchase(draft, 0, 500, identity.id, identity.createdAt);
+      if (!(onSavePurchase ?? store.savePurchase)(receipt)) throw new Error("Rekap kulakan belum dapat disimpan. Periksa data dan penyimpanan perangkat.");
       setDraft(null);
       draftIdentityRef.current = null;
       clearFormDraft(PURCHASE_DRAFT_KEY);
@@ -147,7 +123,7 @@ export function KulakanPageView({ store, onSavePurchase, inventory = [], onLinkB
         {loading ? <LoaderCircle className="spin" size={20}/> : <Camera size={20}/>} {loading ? "Memproses struk…" : "Pindai struk"}
       </button>
       <button className="manual-purchase-button" type="button" onClick={startManual} disabled={loading || Boolean(draft)}><FilePenLine size={19}/> Input Kulakan Manual</button>
-      <button className="manual-purchase-button" type="button" onClick={() => setBarcodeScannerOpen(true)} disabled={loading || Boolean(draft)}><ScanBarcode size={19}/> Scan Barcode Kemasan</button>
+
       <small>{draft ? "Simpan atau batalkan draft saat ini sebelum memulai pencatatan baru." : "Maks. ukuran gambar 10 MB · Pastikan tulisan pada struk terang, fokus, dan terbaca jelas."}</small>
     </section>
 
@@ -161,19 +137,14 @@ export function KulakanPageView({ store, onSavePurchase, inventory = [], onLinkB
         <label><span>Toko grosir</span><input value={draft.merchantName} onChange={e => setDraft({...draft, merchantName:e.target.value})}/></label>
         <label><span>Tanggal</span><input type="date" value={draft.purchaseDate} onChange={e => setDraft({...draft, purchaseDate:e.target.value})}/></label>
       </div>
-      <div className="margin-panel">
-        <div><strong>Margin laba {margin}%</strong><span>Pembulatan harga jual</span></div>
-        <input aria-label="Margin laba" type="range" min="0" max="100" step="5" value={margin} onChange={e=>setMargin(Number(e.target.value))}/>
-        <div className="rounding-toggle"><button className={rounding===500?"active":""} onClick={()=>setRounding(500)}>Rp500</button><button className={rounding===1000?"active":""} onClick={()=>setRounding(1000)}>Rp1.000</button></div>
-      </div>
-      <div className="receipt-items">{pricedItems.map((item,index)=><article key={item.id} className="receipt-item">
+      <div className="receipt-items">{draft.items.map((item,index)=><article key={item.id} className="receipt-item">
         <div className="item-number">{index+1}</div>
         <div className="item-edit">
           <input aria-label={`Nama barang ${index+1}`} value={item.itemName} onChange={e=>updateItem(item.id,{itemName:e.target.value})}/>
           <div><label>Qty<input aria-label={`Qty ${index+1}`} type="number" min="0.01" step="0.01" value={item.qty} onChange={e=>updateItem(item.id,{qty:Number(e.target.value)})}/></label><label>Satuan<input aria-label={`Satuan ${index+1}`} value={item.unit} onChange={e=>updateItem(item.id,{unit:e.target.value})}/></label></div>
           <label>Harga modal / unit<input aria-label={`Harga modal ${index+1}`} type="number" min="1" step="1" value={item.unitPrice} onChange={e=>updateItem(item.id,{unitPrice:Number(e.target.value)})}/></label>
         </div>
-        <div className="price-stack"><span>Modal {formatIDR(item.unitPrice)}</span><strong>Jual {formatIDR(item.recommendedSellPrice||0)}</strong></div>
+        <div className="price-stack"><strong>Subtotal {formatIDR(item.qty * item.unitPrice)}</strong></div>
       </article>)}</div>
       <button className="add-manual-item" type="button" onClick={() => setDraft(current => current ? {...current, items:[...current.items, { id:crypto.randomUUID(), itemName:"", qty:1, unit:"", unitPrice:1, totalPrice:1 }]} : current)}><Plus size={17}/> Tambah barang</button>
       <div className="receipt-total"><span>Total belanja terhitung</span><strong>{formatIDR(reviewedTotal)}</strong></div>
@@ -194,7 +165,7 @@ export function KulakanPageView({ store, onSavePurchase, inventory = [], onLinkB
             <div className="purchase-detail-items">{purchase.items.map((item,index)=><div className="purchase-detail-item" key={item.id}>
               <div className="purchase-detail-name"><span>{index+1}</span><strong>{item.itemName}</strong></div>
               <p>{item.qty} {item.unit} × {formatIDR(item.unitPrice)}</p>
-              <dl><div><dt>Subtotal modal</dt><dd>{formatIDR(item.totalPrice)}</dd></div><div><dt>Rekomendasi jual</dt><dd>{formatIDR(item.recommendedSellPrice || 0)} / {item.unit}</dd></div></dl>
+              <dl><div><dt>Subtotal belanja</dt><dd>{formatIDR(item.totalPrice)}</dd></div></dl>
             </div>)}</div>
             <div className="purchase-detail-total"><span>Total modal belanja</span><strong>{formatIDR(purchase.grandTotal)}</strong></div>
             <a className="purchase-whatsapp" href={buildPurchaseWhatsAppUrl(purchase)} target="_blank" rel="noopener noreferrer"><MessageCircle size={19}/> Rekap ke WhatsApp</a>
@@ -202,20 +173,5 @@ export function KulakanPageView({ store, onSavePurchase, inventory = [], onLinkB
         </article>;
       }) : <div className="empty purchase-empty"><div><ReceiptText size={28}/></div><h3>Belum ada struk kulakan</h3><p>Scan struk pertama untuk mulai membuat rekap modal barang.</p></div>}
     </section>}
-    <BarcodeScanner open={barcodeScannerOpen} title="Scan barcode kulakan" onClose={() => setBarcodeScannerOpen(false)} onDetected={acceptPurchaseBarcode}/>
-    <LinkBarcodeDialog barcode={unregisteredBarcode} inventory={inventory} close={() => setUnregisteredBarcode("")} save={(itemId, unit) => {
-      const saved = onLinkBarcode?.(itemId, unit) ?? false;
-      if (saved) { setUnregisteredBarcode(""); window.setTimeout(() => acceptPurchaseBarcode(unit.barcode), 0); }
-      return saved;
-    }}/>
   </main>;
-}
-
-function LinkBarcodeDialog({ barcode, inventory, close, save }: { barcode: string; inventory: InventoryItem[]; close: () => void; save: (itemId: string, unit: Omit<InventoryAlternateUnit, "id">) => boolean }) {
-  const [error, setError] = useState("");
-  return <Modal open={Boolean(barcode)} title="Barcode belum terdaftar" subtitle={barcode} onClose={close}><form className="form" onSubmit={event => {
-    event.preventDefault(); const data = new FormData(event.currentTarget);
-    const saved = save(String(data.get("itemId")), { name: String(data.get("name")) as InventoryAlternateUnit["name"], barcode, conversion: Number(data.get("conversion")), lastCostPrice: Number(data.get("cost")), sellPrice: Number(data.get("sell")) });
-    if (!saved) setError("Barcode belum dapat ditautkan. Periksa data atau kemungkinan barcode ganda.");
-  }}>{error && <p role="alert" className="inventory-status">{error}</p>}<p className="link-barcode-choice">Daftarkan sebagai produk baru melalui tab Stok, atau tautkan sekarang ke produk yang sudah ada.</p><label className="field"><span>Produk yang sudah ada</span><select name="itemId" required defaultValue=""><option value="" disabled>Pilih produk…</option>{inventory.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label><div className="inventory-form-grid"><label className="field"><span>Jenis satuan</span><select name="name"><option>Dus</option><option>Renceng</option><option>Pak</option><option>Bal</option></select></label><label className="field"><span>Isi per kemasan</span><input name="conversion" type="number" min="2" required/></label></div><label className="field"><span>Harga modal kemasan</span><input name="cost" type="number" min="0" required/></label><label className="field"><span>Harga jual kemasan</span><input name="sell" type="number" min="0" required/></label><div className="form-actions"><button type="button" onClick={close}>Produk baru di tab Stok</button><button className="primary" type="submit">Tautkan barcode</button></div></form></Modal>;
 }

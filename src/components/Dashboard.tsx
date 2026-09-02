@@ -73,7 +73,6 @@ export function DashboardView({ store, todayTurnover = 0, debtPrefill, debtStock
     </section>
 
     <section className="content">
-      <div className="action-heading"><div><p>Ringkasan kasbon pelanggan</p><h2>Kelola kasbon dengan mudah</h2></div><button className="primary" onClick={() => setModal({ kind: "add" })}><Plus size={19}/> Catat kasbon</button></div>
       <label className="search"><Search size={18}/><input value={search} onChange={event => setSearch(event.target.value)} placeholder="Cari nama, nomor HP, atau barang…"/></label>
       <nav className="tabs">
         <button className={tab === "active" ? "active" : ""} onClick={() => setTab("active")}><WalletCards size={17}/>Kasbon Aktif <b>{store.active.length}</b></button>
@@ -83,8 +82,9 @@ export function DashboardView({ store, todayTurnover = 0, debtPrefill, debtStock
       {filtered.length ? <div className="debt-list">{filtered.map(debt => tab === "active"
         ? <DebtCard key={debt.id} debt={debt} store={store.store} onAdd={() => setModal({ kind: "increase", debt })} onPay={() => setModal({ kind: "pay", debt })} onDelete={() => { setDeleteError(""); setModal({ kind: "delete", debt }); }}/>
         : <article className="history-card" key={debt.id}><div className="paid-icon"><CheckCircle2/></div><div><h3>{debt.customerName}</h3><p>{debt.itemsDescription}</p><span>Lunas · {formatDate(debt.paymentHistory.at(-1)?.paidAt ?? debt.createdAt)}</span></div><strong>{formatIDR(debt.totalAmount)}</strong></article>,
-      )}</div> : <div className="empty"><div><BookOpenCheck size={26}/></div><h3>{tab === "active" ? "Belum ada kasbon aktif" : "Belum ada riwayat lunas"}</h3><p>{tab === "active" ? "Mulai catat kasbon pelanggan pertama Anda." : "Kasbon yang lunas akan tampil di sini."}</p>{tab === "active" && <button className="primary" onClick={() => setModal({ kind: "add" })}>Catat kasbon</button>}</div>}
+      )}</div> : <div className="empty"><div><BookOpenCheck size={26}/></div><h3>{tab === "active" ? "Belum ada kasbon aktif" : "Belum ada riwayat lunas"}</h3><p>{tab === "active" ? "Mulai catat kasbon pelanggan pertama Anda." : "Kasbon yang lunas akan tampil di sini."}</p></div>}
     </section>
+    <button className="debt-fab" type="button" aria-label="Catat kasbon" onClick={() => setModal({ kind: "add" })}><Plus size={25}/></button>
     <footer>Data tersimpan otomatis di perangkat ini · Gunakan cadangan saat pindah HP</footer>
 
     <FormModal key={`${effectiveModal?.kind ?? "closed"}:${effectiveModal?.debt?.id ?? "new"}`} state={effectiveModal} close={closeModal} store={store} openBackup={() => setModal({ kind: "backup" })} selectExisting={debt => { clearFormDraft(DEBT_DRAFT_KEY); setModal({ kind: "increase", debt }); }} debtPrefill={debtPrefill} debtStockPrefill={debtStockPrefill} inventoryStore={inventoryStore}/>

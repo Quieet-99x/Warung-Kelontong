@@ -1,11 +1,11 @@
 "use client";
 
-import { BookOpenCheck, Boxes, Landmark, ReceiptText } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { BookOpenCheck, Boxes, Landmark, ReceiptText, ShoppingCart } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useDailyClosingStore } from "@/hooks/useDailyClosingStore";
 import { useKasbonStore } from "@/hooks/useKasbonStore";
 import { usePurchaseStore } from "@/hooks/usePurchaseStore";
-import { PURCHASES_KEY } from "@/hooks/usePurchaseStore";
+
 import { useInventoryStore } from "@/hooks/useInventoryStore";
 import { useSingleWriterLock } from "@/hooks/useSingleWriterLock";
 import { calculateDailyMetrics } from "@/lib/cashflow";
@@ -15,7 +15,7 @@ import type { StockSelection } from "@/types/inventory";
 import CashflowDashboard from "./CashflowDashboard";
 import { DashboardView } from "./Dashboard";
 import { KulakanPageView } from "./KulakanPage";
-import QuickCalculator from "./QuickCalculator";
+import QuickCalculator, { type QuickCalculatorHandle } from "./QuickCalculator";
 import InventoryDashboard from "./InventoryDashboard";
 
 type Page = "kasbon" | "kulakan" | "inventory" | "cashflow";
@@ -30,6 +30,7 @@ export default function WarungApp() {
   const [page, setPage] = useState<Page>("kasbon");
   const [debtPrefill, setDebtPrefill] = useState<number | null>(null);
   const [debtStockPrefill, setDebtStockPrefill] = useState<StockSelection[]>([]);
+  const cashierRef = useRef<QuickCalculatorHandle>(null);
   const writerLock = useSingleWriterLock();
   const kasbonStore = useKasbonStore(writerLock.canWrite);
   const purchaseStore = usePurchaseStore(writerLock.canWrite);
@@ -65,24 +66,21 @@ export default function WarungApp() {
     } catch { return false; }
   };
   const savePurchase = (receipt: Parameters<typeof purchaseStore.savePurchase>[0]) => {
-    if (!purchaseStore.canMutate()) return false;
-    const nextPurchases = purchaseStore.preparePurchase(receipt);
-    const saved = inventoryStore.syncPurchase(receipt, new Map([[PURCHASES_KEY, JSON.stringify(nextPurchases)]]));
-    if (saved) purchaseStore.acceptCommittedPurchases(nextPurchases);
-    return saved;
+    return purchaseStore.savePurchase(receipt);
   };
 
   return <div className="warung-app">
     {writerLock.status === "readonly" && <p className="writer-lock-banner" role="alert">Mode baca saja: aplikasi sedang aktif di tab lain. Tutup tab lain lalu muat ulang halaman ini untuk mencatat transaksi.</p>}
     {writerLock.status === "unsupported" && <p className="writer-lock-banner" role="alert">Mode baca saja: browser ini belum mendukung penguncian data yang aman. Gunakan Chrome, Edge, atau browser terbaru untuk mencatat transaksi.</p>}
     <div className="module-slot kasbon-slot" hidden={page !== "kasbon"}><DashboardView store={kasbonStore} todayTurnover={todayTurnover} debtPrefill={debtPrefill} debtStockPrefill={debtStockPrefill} inventoryStore={inventoryStore} onDebtPrefillConsumed={() => { setDebtPrefill(null); setDebtStockPrefill([]); }}/></div>
-    <div hidden={page !== "kulakan"}><KulakanPageView store={purchaseStore} inventory={inventoryStore.inventory} onLinkBarcode={inventoryStore.linkAlternateUnit} onSavePurchase={savePurchase}/></div>
+    <div hidden={page !== "kulakan"}><KulakanPageView store={purchaseStore} onSavePurchase={savePurchase}/></div>
     <div hidden={page !== "inventory"}><InventoryDashboard store={inventoryStore}/></div>
     <div hidden={page !== "cashflow"}><CashflowDashboard debts={kasbonStore.debts} receipts={purchaseStore.purchases} closingStore={closingStore}/></div>
-    <QuickCalculator onCreateDebt={createDebt} onAddIncome={addIncome} inventory={inventoryStore.inventory} store={kasbonStore.store}/>
+    <QuickCalculator ref={cashierRef} trigger="external" onCreateDebt={createDebt} onAddIncome={addIncome} inventory={inventoryStore.inventory} store={kasbonStore.store}/>
     <nav className="app-bottom-nav" aria-label="Navigasi utama">
       <button className={page === "kasbon" ? "active" : ""} onClick={() => setPage("kasbon")}><BookOpenCheck size={19}/><span>Kasbon</span></button>
       <button className={page === "kulakan" ? "active" : ""} onClick={() => setPage("kulakan")}><ReceiptText size={19}/><span>Kulakan</span></button>
+      <button className="cashier-nav-primary" type="button" aria-label="Buka kasir cepat" onClick={() => cashierRef.current?.open()}><ShoppingCart aria-hidden="true"/></button>
       <button className={page === "inventory" ? "active" : ""} onClick={() => setPage("inventory")}><Boxes size={19}/><span>Stok</span></button>
       <button className={page === "cashflow" ? "active" : ""} onClick={() => setPage("cashflow")}><Landmark size={19}/><span>Buku Kas</span></button>
     </nav>

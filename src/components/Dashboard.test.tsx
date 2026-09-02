@@ -22,9 +22,18 @@ describe("Dashboard forms", () => {
 
   afterEach(() => vi.restoreAllMocks());
 
+  it("starts content at search and uses one floating add-debt action", async () => {
+    render(<Dashboard/>);
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
+    expect(screen.queryByText("Ringkasan kasbon pelanggan")).not.toBeInTheDocument();
+    expect(screen.queryByText("Kelola kasbon dengan mudah")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: "Catat kasbon" })).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Catat kasbon" })).toHaveClass("debt-fab");
+  });
+
   it("accepts whole-rupiah amounts without an invalid step constraint", async () => {
     render(<Dashboard />);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
 
     await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
 
@@ -45,7 +54,7 @@ describe("Dashboard forms", () => {
 
   it("opens the data and backup center from store settings", async () => {
     render(<Dashboard />);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Pengaturan warung" }));
     await userEvent.click(screen.getByRole("button", { name: /Pusat Data & Cadangan/i }));
     expect(screen.getByRole("heading", { name: "Pusat Data & Cadangan" })).toBeInTheDocument();
@@ -53,7 +62,7 @@ describe("Dashboard forms", () => {
 
   it("processes and persists a QRIS image from store settings", async () => {
     render(<Dashboard />);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: "Pengaturan warung" }));
     await userEvent.upload(screen.getByLabelText(/Unggah foto QRIS/i), new File(["image"], "qris.png", { type: "image/png" }));
     expect(screen.getByLabelText("Atur crop QRIS")).toBeInTheDocument();
@@ -66,21 +75,21 @@ describe("Dashboard forms", () => {
 
   it("keeps the save action visibly styled in the new debt modal", async () => {
     render(<Dashboard />);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
     expect(screen.getByRole("button", { name: "Simpan catatan" })).toHaveClass("primary", "form-submit");
   });
 
   it("restores an unfinished debt after the component remounts", async () => {
     const first = render(<Dashboard/>);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
     await userEvent.type(screen.getByRole("textbox", { name: "Nama pelanggan" }), "Siti");
     await userEvent.type(screen.getByRole("textbox", { name: "Barang yang diambil" }), "Beras");
     first.unmount();
 
     render(<Dashboard/>);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
     expect(screen.getByRole("textbox", { name: "Nama pelanggan" })).toHaveValue("Siti");
     expect(screen.getByRole("textbox", { name: "Barang yang diambil" })).toHaveValue("Beras");
@@ -105,7 +114,7 @@ describe("Dashboard forms", () => {
 
   it("keeps the form open and reports a storage failure", async () => {
     render(<Dashboard />);
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
     await userEvent.type(screen.getByRole("textbox", { name: "Nama pelanggan" }), "Siti");
     await userEvent.type(screen.getByRole("textbox", { name: "Nomor WhatsApp" }), "081234567890");
@@ -179,7 +188,7 @@ describe("Dashboard forms", () => {
     localStorage.setItem("buku-kasbon.debts.v1", "corrupt-data");
     render(<Dashboard />);
 
-    await waitFor(() => expect(screen.getByText("Kelola kasbon dengan mudah")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await new Promise(resolve => window.setTimeout(resolve, 20));
     expect(localStorage.getItem("buku-kasbon.debts.v1")).toBe("corrupt-data");
   });

@@ -2,6 +2,7 @@ import type {Metadata,Viewport} from "next"; import {Plus_Jakarta_Sans} from "ne
 import "./inventory.css";
 import "./pwa-qris.css";
 import "./page-header-system.css";
+import "./cashier-navigation-refinement.css";
 import "./multi-unit.css";
 import PWAInstallPrompt from "@/components/PWAInstallPrompt";
 const font=Plus_Jakarta_Sans({subsets:["latin"],variable:"--font-app"});

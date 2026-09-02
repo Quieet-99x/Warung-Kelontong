@@ -24,7 +24,7 @@ describe("purchase WhatsApp recap", () => {
     expect(message).toContain("*Jumlah barang:* 2");
     expect(message).toContain("12 Pcs x Rp14.000");
     expect(message).toContain("Subtotal: Rp168.000");
-    expect(message).toContain("Rekomendasi jual: Rp16.500 / Pcs");
+    expect(message).not.toContain("Rekomendasi jual");
     expect(message).toContain("*TOTAL MODAL: Rp253.000*");
     expect(message).not.toMatch(/[\p{Extended_Pictographic}\uFFFD]/u);
   });
