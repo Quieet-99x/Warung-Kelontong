@@ -137,7 +137,10 @@
   padding: 16px 14px;
   border-radius: 16px;
   display: grid;
-  align-content: space-between;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
 }
 
 .cashier-total {
