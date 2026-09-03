@@ -5,8 +5,9 @@ import { addIncomeToDate, closeBooksForDate, DAILY_CLOSINGS_KEY, writeDailyClosi
 import { parseStoredDailyClosings } from "@/lib/cashflow";
 import type { DailyClosingRecord, DailyMetrics } from "@/types/cashflow";
 import { newId } from "@/lib/utils";
+import type { ScopedStorage } from "@/lib/scoped-storage";
 
-export function useDailyClosingStore(writerEnabled = true) {
+export function useDailyClosingStore(writerEnabled = true, storage?: ScopedStorage) {
   const [closings, setClosings] = useState<DailyClosingRecord[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const recordsRef = useRef<DailyClosingRecord[]>([]);
@@ -15,7 +16,7 @@ export function useDailyClosingStore(writerEnabled = true) {
 
   useEffect(() => {
     const load = () => {
-      const raw = localStorage.getItem(DAILY_CLOSINGS_KEY);
+      const raw = (storage ?? localStorage).getItem(DAILY_CLOSINGS_KEY);
       const parsed = raw !== null ? parseStoredDailyClosings(raw) : [];
       if (!parsed) { validRef.current = false; return; }
       validRef.current = true;
@@ -27,20 +28,20 @@ export function useDailyClosingStore(writerEnabled = true) {
       finally { readyRef.current = true; setHydrated(true); }
     }, 0);
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== null && event.key !== DAILY_CLOSINGS_KEY) return;
+      if (event.key !== null && event.key !== (storage?.key(DAILY_CLOSINGS_KEY) ?? DAILY_CLOSINGS_KEY)) return;
       try { load(); } catch { validRef.current = false; }
     };
     window.addEventListener("storage", onStorage);
     return () => { window.clearTimeout(timer); window.removeEventListener("storage", onStorage); };
-  }, []);
+  }, [storage]);
 
   const commit = useCallback((next: DailyClosingRecord[]) => {
     if (!writerEnabled || !readyRef.current || !validRef.current) return false;
-    if (!writeDailyClosings(localStorage, next)) return false;
+    if (!writeDailyClosings(storage ?? localStorage, next)) return false;
     recordsRef.current = next;
     setClosings(next);
     return true;
-  }, [writerEnabled]);
+  }, [storage, writerEnabled]);
 
   const addIncome = useCallback((date: string, amount: number, metrics: DailyMetrics) => {
     try {

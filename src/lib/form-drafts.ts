@@ -1,4 +1,5 @@
 import type { ReceiptExtraction } from "@/types/receipt";
+import type { BrowserStorage } from "./scoped-storage";
 
 export const DEBT_DRAFT_KEY = "buku-warung.draft.debt.v1";
 export const PURCHASE_DRAFT_KEY = "buku-warung.draft.purchase.v1";
@@ -49,24 +50,25 @@ function parsePurchase(value: unknown): PurchaseFormDraft | null {
   };
 }
 
-function read(key: string): unknown {
+function read(key: string, storage?: BrowserStorage): unknown {
   try {
-    const raw = sessionStorage.getItem(key);
+    const raw = (storage ?? sessionStorage).getItem(key);
     return raw === null ? null : JSON.parse(raw);
   } catch { return null; }
 }
 
-export const readDebtDraft = () => parseDebt(read(DEBT_DRAFT_KEY));
-export const readPurchaseDraft = () => parsePurchase(read(PURCHASE_DRAFT_KEY));
+export const readDebtDraft = (storage?: BrowserStorage) => parseDebt(read(DEBT_DRAFT_KEY, storage));
+export const readPurchaseDraft = (storage?: BrowserStorage) => parsePurchase(read(PURCHASE_DRAFT_KEY, storage));
 
-export function writeFormDraft(key: string, value: unknown): boolean {
+export function writeFormDraft(key: string, value: unknown, storage?: BrowserStorage): boolean {
   try {
-    sessionStorage.setItem(key, JSON.stringify(value));
-    return sessionStorage.getItem(key) === JSON.stringify(value);
+    const target = storage ?? sessionStorage;
+    target.setItem(key, JSON.stringify(value));
+    return target.getItem(key) === JSON.stringify(value);
   } catch { return false; }
 }
 
-export function clearFormDraft(key: string): boolean {
-  try { sessionStorage.removeItem(key); return sessionStorage.getItem(key) === null; }
+export function clearFormDraft(key: string, storage?: BrowserStorage): boolean {
+  try { const target = storage ?? sessionStorage; target.removeItem(key); return target.getItem(key) === null; }
   catch { return false; }
 }

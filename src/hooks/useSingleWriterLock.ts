@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 
 export type WriterLockStatus = "checking" | "writer" | "readonly" | "unsupported";
 
-export function useSingleWriterLock() {
+export function useSingleWriterLock(accountId = "anonymous") {
   const [status, setStatus] = useState<WriterLockStatus>("checking");
 
   useEffect(() => {
@@ -14,7 +14,7 @@ export function useSingleWriterLock() {
       queueMicrotask(() => { if (mounted) setStatus("unsupported"); });
       return () => { mounted = false; };
     }
-    void navigator.locks.request("warung-kelontong-writer", { ifAvailable: true, mode: "exclusive" }, async lock => {
+    void navigator.locks.request(`warung-kelontong-writer:${accountId}`, { ifAvailable: true, mode: "exclusive" }, async lock => {
       if (!lock) {
         if (mounted) setStatus("readonly");
         return;
@@ -26,7 +26,7 @@ export function useSingleWriterLock() {
       mounted = false;
       release?.();
     };
-  }, []);
+  }, [accountId]);
 
   return { status, canWrite: status === "writer" } as const;
 }

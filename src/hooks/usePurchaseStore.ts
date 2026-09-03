@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { parseStoredPurchases } from "@/lib/purchase-storage";
 import type { PurchaseReceipt } from "@/types/receipt";
+import type { ScopedStorage } from "@/lib/scoped-storage";
 
 export const PURCHASES_KEY = "buku-kasbon.purchases.v1";
 
-export function usePurchaseStore(writerEnabled = true) {
+export function usePurchaseStore(writerEnabled = true, storage?: ScopedStorage) {
   const [purchases, setPurchases] = useState<PurchaseReceipt[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const purchasesRef = useRef<PurchaseReceipt[]>([]);
@@ -16,7 +17,7 @@ export function usePurchaseStore(writerEnabled = true) {
 
   useEffect(() => {
     const load = () => {
-      const raw = localStorage.getItem(PURCHASES_KEY);
+      const raw = (storage ?? localStorage).getItem(PURCHASES_KEY);
       const stored = raw !== null ? parseStoredPurchases(raw) : [];
       if (!stored) { validRef.current = false; return; }
       validRef.current = true;
@@ -28,12 +29,12 @@ export function usePurchaseStore(writerEnabled = true) {
       finally { readyRef.current = true; setHydrated(true); }
     }, 0);
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== null && event.key !== PURCHASES_KEY) return;
+      if (event.key !== null && event.key !== (storage?.key(PURCHASES_KEY) ?? PURCHASES_KEY)) return;
       try { load(); } catch { validRef.current = false; }
     };
     window.addEventListener("storage", onStorage);
     return () => { window.clearTimeout(timer); window.removeEventListener("storage", onStorage); };
-  }, []);
+  }, [storage]);
 
   const preparePurchase = useCallback((purchase: PurchaseReceipt) => purchasesRef.current.some(current => current.id === purchase.id)
     ? purchasesRef.current
@@ -47,14 +48,15 @@ export function usePurchaseStore(writerEnabled = true) {
     const next = preparePurchase(purchase);
     const serialized = JSON.stringify(next);
     try {
-      localStorage.setItem(PURCHASES_KEY, serialized);
-      if (localStorage.getItem(PURCHASES_KEY) !== serialized) throw new Error();
+      const target = storage ?? localStorage;
+      target.setItem(PURCHASES_KEY, serialized);
+      if (target.getItem(PURCHASES_KEY) !== serialized) throw new Error();
       acceptCommittedPurchases(next);
       return true;
     } catch {
       return false;
     }
-  }, [acceptCommittedPurchases, preparePurchase, writerEnabled]);
+  }, [acceptCommittedPurchases, preparePurchase, storage, writerEnabled]);
 
   const canMutate = useCallback(() => writerEnabled && readyRef.current && validRef.current, [writerEnabled]);
   return { purchases, hydrated, savePurchase, preparePurchase, acceptCommittedPurchases, canMutate };

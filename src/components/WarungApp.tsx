@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpenCheck, Boxes, Landmark, ReceiptText, ShoppingCart } from "lucide-react";
+import { BookOpenCheck, Boxes, Landmark, LogOut, ReceiptText, ShoppingCart } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useDailyClosingStore } from "@/hooks/useDailyClosingStore";
 import { useKasbonStore } from "@/hooks/useKasbonStore";
@@ -11,6 +11,7 @@ import { useSingleWriterLock } from "@/hooks/useSingleWriterLock";
 import { calculateDailyMetrics } from "@/lib/cashflow";
 import { DAILY_CLOSINGS_KEY } from "@/lib/cashflow-storage";
 import { APPLICATION_RESET_SIGNAL_KEY, SESSION_STORAGE_KEYS } from "@/lib/backup";
+import { createScopedStorage } from "@/lib/scoped-storage";
 import type { StockSelection } from "@/types/inventory";
 import CashflowDashboard from "./CashflowDashboard";
 import { DashboardView } from "./Dashboard";
@@ -26,29 +27,33 @@ const localDate = () => {
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
 };
 
-export default function WarungApp() {
+export default function WarungApp({ accountId, user, logoutAction }: { accountId?: string; user?: { name?: string | null; email?: string | null }; logoutAction?: () => Promise<void> }) {
   const [page, setPage] = useState<Page>("kasbon");
   const [debtPrefill, setDebtPrefill] = useState<number | null>(null);
   const [debtStockPrefill, setDebtStockPrefill] = useState<StockSelection[]>([]);
   const cashierRef = useRef<QuickCalculatorHandle>(null);
-  const writerLock = useSingleWriterLock();
-  const kasbonStore = useKasbonStore(writerLock.canWrite);
-  const purchaseStore = usePurchaseStore(writerLock.canWrite);
-  const inventoryStore = useInventoryStore(writerLock.canWrite);
-  const closingStore = useDailyClosingStore(writerLock.canWrite);
+  const local = useMemo(() => accountId ? createScopedStorage(localStorage, accountId) : undefined, [accountId]);
+  const session = useMemo(() => accountId ? createScopedStorage(sessionStorage, accountId) : undefined, [accountId]);
+  const writerLock = useSingleWriterLock(accountId);
+  const kasbonStore = useKasbonStore(writerLock.canWrite, local);
+  const purchaseStore = usePurchaseStore(writerLock.canWrite, local);
+  const inventoryStore = useInventoryStore(writerLock.canWrite, local);
+  const closingStore = useDailyClosingStore(writerLock.canWrite, local);
   const today = localDate();
   const metrics = useMemo(() => calculateDailyMetrics(today, kasbonStore.debts, purchaseStore.purchases), [today, kasbonStore.debts, purchaseStore.purchases]);
   const todayTurnover = closingStore.closings.find(closing => closing.date === today)?.manualIncome ?? 0;
 
   useEffect(() => {
     const receiveReset = (event: StorageEvent) => {
-      if (event.storageArea !== localStorage || event.key !== APPLICATION_RESET_SIGNAL_KEY || !event.newValue) return;
-      for (const key of Object.values(SESSION_STORAGE_KEYS)) sessionStorage.removeItem(key);
+      const resetKey = local?.key(APPLICATION_RESET_SIGNAL_KEY) ?? APPLICATION_RESET_SIGNAL_KEY;
+      if (event.storageArea !== localStorage || event.key !== resetKey || !event.newValue) return;
+      const target = session ?? sessionStorage;
+      for (const key of Object.values(SESSION_STORAGE_KEYS)) target.removeItem(key);
       window.location.reload();
     };
     window.addEventListener("storage", receiveReset);
     return () => window.removeEventListener("storage", receiveReset);
-  }, []);
+  }, [local, session]);
 
   const createDebt = (amount: number, stockItems: StockSelection[]) => {
     setDebtPrefill(amount);
@@ -70,10 +75,11 @@ export default function WarungApp() {
   };
 
   return <div className="warung-app">
+    {accountId && logoutAction && <aside className="account-bar"><span><strong>{user?.name || "Akun Google"}</strong><small>{user?.email}</small></span><form action={logoutAction}><button type="submit"><LogOut size={16}/> Keluar</button></form></aside>}
     {writerLock.status === "readonly" && <p className="writer-lock-banner" role="alert">Mode baca saja: aplikasi sedang aktif di tab lain. Tutup tab lain lalu muat ulang halaman ini untuk mencatat transaksi.</p>}
     {writerLock.status === "unsupported" && <p className="writer-lock-banner" role="alert">Mode baca saja: browser ini belum mendukung penguncian data yang aman. Gunakan Chrome, Edge, atau browser terbaru untuk mencatat transaksi.</p>}
-    <div className="module-slot kasbon-slot" hidden={page !== "kasbon"}><DashboardView store={kasbonStore} todayTurnover={todayTurnover} debtPrefill={debtPrefill} debtStockPrefill={debtStockPrefill} inventoryStore={inventoryStore} onDebtPrefillConsumed={() => { setDebtPrefill(null); setDebtStockPrefill([]); }}/></div>
-    <div hidden={page !== "kulakan"}><KulakanPageView store={purchaseStore} onSavePurchase={savePurchase}/></div>
+    <div className="module-slot kasbon-slot" hidden={page !== "kasbon"}><DashboardView store={kasbonStore} todayTurnover={todayTurnover} debtPrefill={debtPrefill} debtStockPrefill={debtStockPrefill} inventoryStore={inventoryStore} localStore={local} sessionStore={session} onDebtPrefillConsumed={() => { setDebtPrefill(null); setDebtStockPrefill([]); }}/></div>
+    <div hidden={page !== "kulakan"}><KulakanPageView store={purchaseStore} draftStorage={session} onSavePurchase={savePurchase}/></div>
     <div hidden={page !== "inventory"}><InventoryDashboard store={inventoryStore}/></div>
     <div hidden={page !== "cashflow"}><CashflowDashboard debts={kasbonStore.debts} receipts={purchaseStore.purchases} closingStore={closingStore}/></div>
     <QuickCalculator ref={cashierRef} trigger="external" onCreateDebt={createDebt} onAddIncome={addIncome} inventory={inventoryStore.inventory} store={kasbonStore.store}/>

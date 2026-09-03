@@ -31,6 +31,14 @@ describe("useSingleWriterLock", () => {
     await waitFor(() => expect(request).toHaveBeenCalledOnce());
   });
 
+  it("isolates writer locks by account", async () => {
+    const request = vi.fn(async (_name: string, _options: object, callback: (lock: object) => Promise<void>) => callback({}));
+    Object.defineProperty(navigator, "locks", { configurable: true, value: { request } });
+    const { result } = renderHook(() => useSingleWriterLock("google-user-a"));
+    await waitFor(() => expect(result.current.status).toBe("writer"));
+    expect(request).toHaveBeenCalledWith("warung-kelontong-writer:google-user-a", expect.any(Object), expect.any(Function));
+  });
+
   it("makes a second tab read-only when the lock is unavailable", async () => {
     Object.defineProperty(navigator, "locks", { configurable: true, value: { request: vi.fn(async (_name: string, _options: object, callback: (lock: null) => void) => callback(null)) } });
     const { result } = renderHook(() => useSingleWriterLock());

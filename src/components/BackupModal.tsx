@@ -16,6 +16,7 @@ import {
   restoreCheckpoint,
 } from "@/lib/backup";
 import { Modal } from "./Modal";
+import type { ScopedStorage } from "@/lib/scoped-storage";
 
 interface BackupModalProps {
   open: boolean;
@@ -24,11 +25,13 @@ interface BackupModalProps {
   debts: DebtItem[];
   onRestored: () => void;
   canReset?: boolean;
+  localStore?: ScopedStorage;
+  sessionStore?: ScopedStorage;
 }
 
 const currentMonth = () => new Date().toISOString().slice(0, 7);
 
-export default function BackupModal({ open, onClose, storeProfile, debts, onRestored, canReset = true }: BackupModalProps) {
+export default function BackupModal({ open, onClose, storeProfile, debts, onRestored, canReset = true, localStore, sessionStore }: BackupModalProps) {
   const [month, setMonth] = useState(currentMonth);
   const [checkpoint, setCheckpoint] = useState<Checkpoint | null>(null);
   const [currentCounts, setCurrentCounts] = useState<{ debts: number; receipts: number; closings: number; inventory: number } | null>(null);
@@ -48,7 +51,7 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
 
   const downloadCSV = () => {
     try {
-      const data = readCurrentBackup(localStorage, { storeProfile, debts, receipts: [] });
+      const data = readCurrentBackup(localStore ?? localStorage, { storeProfile, debts, receipts: [] });
       const csv = buildMonthlyCSV(month, data.debts, data.receipts);
       downloadTextFile(csv, "text/csv;charset=utf-8", `Rekap_Warung_${month}.csv`);
       setStatus({ kind: "success", message: `Rekap ${month} berhasil disiapkan.` });
@@ -60,7 +63,7 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
   const downloadCheckpoint = () => {
     try {
       const fallback = { storeProfile, debts, receipts: [] };
-      const data = readCurrentBackup(localStorage, fallback);
+      const data = readCurrentBackup(localStore ?? localStorage, fallback);
       const date = new Date().toISOString().slice(0, 10);
       downloadTextFile(buildCheckpoint(data), "application/json;charset=utf-8", `Checkpoint_Warung_${date}.json`);
       setStatus({ kind: "success", message: "Checkpoint lengkap berhasil disiapkan." });
@@ -79,7 +82,7 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
       const parsed = parseCheckpoint(await file.text());
       setCheckpoint(parsed);
       try {
-        const current = readCurrentBackup(localStorage, { storeProfile, debts, receipts: [] });
+        const current = readCurrentBackup(localStore ?? localStorage, { storeProfile, debts, receipts: [] });
         setCurrentCounts({ debts: current.debts.length, receipts: current.receipts.length, closings: current.dailyClosings?.length ?? 0, inventory: current.inventory?.length ?? 0 });
       } catch {
         setCurrentCounts(null);
@@ -94,7 +97,7 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
   const confirmRestore = () => {
     if (!checkpoint) return;
     try {
-      restoreCheckpoint(localStorage, checkpoint.data);
+      restoreCheckpoint(localStore ?? localStorage, checkpoint.data);
       setStatus({ kind: "success", message: "Data berhasil dipulihkan. Aplikasi akan memuat ulang." });
       setCheckpoint(null);
       onRestored();
@@ -110,7 +113,7 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
   const confirmReset = () => {
     if (!canReset || resetStep !== 2 || resetPhrase !== "RESET") return;
     try {
-      resetApplicationData(localStorage, sessionStorage);
+      resetApplicationData(localStore ?? localStorage, sessionStore ?? sessionStorage);
     } catch (reason) {
       setStatus({ kind: "error", message: reason instanceof Error ? reason.message : "Reset data gagal." });
       return;
@@ -118,7 +121,7 @@ export default function BackupModal({ open, onClose, storeProfile, debts, onRest
     setStatus({ kind: "success", message: "Seluruh data aplikasi berhasil direset. Aplikasi akan memuat ulang." });
     cancelReset();
     try {
-      broadcastApplicationReset(localStorage);
+      broadcastApplicationReset(localStore ?? localStorage);
     } catch {
       window.alert("Data di tab ini berhasil direset, tetapi tab aplikasi lain tidak dapat diberi tahu otomatis. Tutup atau muat ulang semua tab aplikasi lain untuk membersihkan draft di tab tersebut.");
     }

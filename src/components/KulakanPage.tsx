@@ -11,6 +11,7 @@ import { buildPurchaseWhatsAppUrl } from "@/lib/purchase-whatsapp";
 import { formatDate, formatIDR } from "@/lib/utils";
 import { clearFormDraft, PURCHASE_DRAFT_KEY, readPurchaseDraft, writeFormDraft } from "@/lib/form-drafts";
 import type { ReceiptExtraction, ReceiptItem } from "@/types/receipt";
+import type { ScopedStorage } from "@/lib/scoped-storage";
 
 
 type Draft = ReceiptExtraction | null;
@@ -30,9 +31,9 @@ export default function KulakanPage() {
   return <KulakanPageView store={store}/>;
 }
 
-export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStore; onSavePurchase?: (receipt: ReturnType<typeof createPurchase>) => boolean }) {
+export function KulakanPageView({ store, draftStorage, onSavePurchase }: { store: PurchaseStore; draftStorage?: ScopedStorage; onSavePurchase?: (receipt: ReturnType<typeof createPurchase>) => boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
-  const restored = useMemo(() => readPurchaseDraft(), []);
+  const restored = useMemo(() => readPurchaseDraft(draftStorage), [draftStorage]);
   const draftIdentityRef = useRef<{ id: string; createdAt: string } | null>(restored?.identity ?? null);
   const [draft, setDraft] = useState<Draft>(restored?.draft ?? null);
 
@@ -46,8 +47,8 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
     if (!draft) return;
     const identity = draftIdentityRef.current ?? { id: crypto.randomUUID(), createdAt: new Date().toISOString() };
     draftIdentityRef.current = identity;
-    writeFormDraft(PURCHASE_DRAFT_KEY, { draft, margin: 0, rounding: 500, identity });
-  }, [draft]);
+    writeFormDraft(PURCHASE_DRAFT_KEY, { draft, margin: 0, rounding: 500, identity }, draftStorage);
+  }, [draft, draftStorage]);
 
   const startManual = () => {
     const now = new Date();
@@ -106,7 +107,7 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
       if (!(onSavePurchase ?? store.savePurchase)(receipt)) throw new Error("Rekap kulakan belum dapat disimpan. Periksa data dan penyimpanan perangkat.");
       setDraft(null);
       draftIdentityRef.current = null;
-      clearFormDraft(PURCHASE_DRAFT_KEY);
+      clearFormDraft(PURCHASE_DRAFT_KEY, draftStorage);
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Periksa kembali hasil scan sebelum disimpan.");
@@ -147,7 +148,7 @@ export function KulakanPageView({ store, onSavePurchase }: { store: PurchaseStor
       </article>)}</div>
       <button className="add-manual-item" type="button" onClick={() => setDraft(current => current ? {...current, items:[...current.items, { id:crypto.randomUUID(), itemName:"", qty:1, unit:"", unitPrice:1, totalPrice:1 }]} : current)}><Plus size={17}/> Tambah barang</button>
       <div className="receipt-total"><span>Total belanja terhitung</span><strong>{formatIDR(reviewedTotal)}</strong></div>
-      <div className="purchase-draft-actions"><button type="button" onClick={() => { setDraft(null); draftIdentityRef.current = null; clearFormDraft(PURCHASE_DRAFT_KEY); setError(""); }}>Batalkan draft</button><button className="save-purchase" onClick={save}><Save size={19}/> Simpan ke rekap belanja</button></div>
+      <div className="purchase-draft-actions"><button type="button" onClick={() => { setDraft(null); draftIdentityRef.current = null; clearFormDraft(PURCHASE_DRAFT_KEY, draftStorage); setError(""); }}>Batalkan draft</button><button className="save-purchase" onClick={save}><Save size={19}/> Simpan ke rekap belanja</button></div>
     </section> : <section className="purchase-history">
       <div className="section-title"><div><span>RIWAYAT BELANJA</span><h2>Struk tersimpan</h2></div><b>{store.purchases.length}</b></div>
       {store.purchases.length ? store.purchases.map(purchase=>{

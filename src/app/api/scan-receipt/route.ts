@@ -2,6 +2,7 @@ import { GoogleGenAI } from "@google/genai";
 import { extractReceiptWithGemini } from "@/lib/gemini-receipt";
 import { checkOrigin, createRateLimiter, readLimitedBody } from "@/lib/scan-api-protection";
 import { parseScanRequest } from "@/lib/scan-request";
+import { auth } from "@/auth";
 
 export const runtime = "nodejs";
 export const maxDuration = 30;
@@ -10,6 +11,8 @@ const allowRequest = createRateLimiter(10, 60 * 60 * 1000);
 
 export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (!session?.user?.id) return Response.json({ error: "Silakan masuk kembali untuk menggunakan scan." }, { status: 401 });
     if (!checkOrigin(request)) return Response.json({ error: "Permintaan ditolak." }, { status: 403 });
     const client = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     if (!allowRequest(client)) return Response.json({ error: "Batas scan tercapai. Coba lagi nanti." }, { status: 429 });

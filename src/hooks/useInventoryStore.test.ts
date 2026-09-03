@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { INVENTORY_KEYS } from "@/lib/inventory-storage";
 import { useInventoryStore } from "./useInventoryStore";
+import { createScopedStorage } from "@/lib/scoped-storage";
 
 const item = { id: "s1", name: "Beras", currentStock: 2, unit: "kg", lastCostPrice: 15000, minStockAlert: 3, updatedAt: "2026-08-31T10:00:00.000Z" };
 
@@ -17,6 +18,27 @@ describe("useInventoryStore", () => {
     act(() => expect(result.current.adjustStock("s1", 1, "Penyesuaian cepat")).toBe(true));
     expect(result.current.inventory[0].currentStock).toBe(3);
     expect(JSON.parse(localStorage.getItem(INVENTORY_KEYS.logs) ?? "[]")[0]).toMatchObject({ itemId: "s1", changeQty: 1, type: "MANUAL_ADJUST" });
+  });
+
+  it("commits inventory and linked sale writes atomically inside one account namespace", async () => {
+    const storage = createScopedStorage(localStorage, "google-user-a");
+    storage.setItem(INVENTORY_KEYS.inventory, JSON.stringify([item]));
+    storage.setItem(INVENTORY_KEYS.logs, "[]");
+    storage.setItem(INVENTORY_KEYS.shoppingList, "[]");
+    const { result } = renderHook(() => useInventoryStore(true, storage));
+    await waitFor(() => expect(result.current.hydrated).toBe(true));
+
+    act(() => expect(result.current.deductSale(
+      [{ itemId: "s1", qtySold: 1, unitName: "kg" }],
+      "OUT_CASH_SALE",
+      "Penjualan",
+      "sale-1",
+      new Map([["daily_closings", "[]"]]),
+    )).toBe(true));
+
+    expect(localStorage.getItem(INVENTORY_KEYS.inventory)).toBeNull();
+    expect(JSON.parse(storage.getItem(INVENTORY_KEYS.inventory) ?? "[]")[0].currentStock).toBe(1);
+    expect(storage.getItem("daily_closings")).toBe("[]");
   });
 
   it("does not overwrite an existing corrupt inventory key", async () => {

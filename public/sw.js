@@ -4,15 +4,7 @@ const BASE_SHELL = ["/manifest.webmanifest", "/icons/icon-192x192.png", "/icons/
 
 async function precacheAppShell() {
   const cache = await caches.open(CACHE_NAME);
-  const response = await fetch("/", { cache: "reload" });
-  if (!response.ok) throw new Error("App shell unavailable");
-  const html = await response.clone().text();
-  const assetUrls = [...html.matchAll(/(?:src|href)=["']([^"']+)["']/g)]
-    .map(match => new URL(match[1], self.location.origin))
-    .filter(url => url.origin === self.location.origin && url.pathname.startsWith("/_next/static/"))
-    .map(url => `${url.pathname}${url.search}`);
-  await cache.put("/", response);
-  await cache.addAll([...new Set([...BASE_SHELL, ...assetUrls])]);
+  await cache.addAll(BASE_SHELL);
 }
 
 self.addEventListener("install", event => {
@@ -37,8 +29,8 @@ self.addEventListener("fetch", event => {
   if (url.origin !== self.location.origin || url.pathname.startsWith("/api/")) return;
 
   if (request.mode === "navigate") {
-    event.respondWith(caches.open(CACHE_NAME).then(cache => cache.match("/"))
-      .then(cached => cached || fetch(request)));
+    // Authenticated HTML must never be cached or replayed to another account.
+    event.respondWith(fetch(request));
     return;
   }
 

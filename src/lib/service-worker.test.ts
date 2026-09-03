@@ -4,10 +4,16 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync("public/sw.js", "utf8");
 
 describe("service worker app shell", () => {
-  it("precaches Next.js chunks referenced by the first HTML response", () => {
-    expect(source).toContain("matchAll");
-    expect(source).toContain("/_next/static/");
-    expect(source).toContain("cache.addAll");
+  it("does not cache authenticated HTML navigations", () => {
+    expect(source).toContain('request.mode === "navigate"');
+    expect(source).toContain("event.respondWith(fetch(request))");
+    expect(source).not.toContain('cache.put("/"');
+    expect(source).not.toContain('cache.match("/"');
+  });
+
+  it("precaches only public icons and manifest", () => {
+    expect(source).toContain("BASE_SHELL");
+    expect(source).toContain("cache.addAll(BASE_SHELL)");
   });
 
   it("bypasses every API request", () => {

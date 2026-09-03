@@ -5,12 +5,13 @@ import type { DebtItem, StoreProfile } from "@/types";
 import { addAmountToDebt, applyPayment, assertValidAmount } from "@/lib/debt";
 import { parseStoredDebts, parseStoredStore } from "@/lib/storage";
 import { newId } from "@/lib/utils";
+import type { ScopedStorage } from "@/lib/scoped-storage";
 
 export const DEBTS_KEY = "buku-kasbon.debts.v1";
 const STORE_KEY = "buku-kasbon.store.v1";
 const defaultStore: StoreProfile = { storeName: "Warung Makmur", ownerName: "Pemilik Warung", paymentInfo: "" };
 
-export function useKasbonStore(writerEnabled = true) {
+export function useKasbonStore(writerEnabled = true, storage?: ScopedStorage) {
   const [debts, setDebts] = useState<DebtItem[]>([]);
   const [store, setStoreState] = useState<StoreProfile>(defaultStore);
   const [hydrated, setHydrated] = useState(false);
@@ -20,8 +21,9 @@ export function useKasbonStore(writerEnabled = true) {
 
   useEffect(() => {
     const load = () => {
-      const rawDebts = localStorage.getItem(DEBTS_KEY);
-      const rawStore = localStorage.getItem(STORE_KEY);
+      const target = storage ?? localStorage;
+      const rawDebts = target.getItem(DEBTS_KEY);
+      const rawStore = target.getItem(STORE_KEY);
       const storedDebts = rawDebts !== null ? parseStoredDebts(rawDebts) : [];
       const storedStore = rawStore !== null ? parseStoredStore(rawStore) : defaultStore;
       if (!storedDebts || !storedStore) { validRef.current = false; return; }
@@ -35,12 +37,14 @@ export function useKasbonStore(writerEnabled = true) {
       finally { readyRef.current = true; setHydrated(true); }
     }, 0);
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== null && event.key !== DEBTS_KEY && event.key !== STORE_KEY) return;
+      const debtKey = storage?.key(DEBTS_KEY) ?? DEBTS_KEY;
+      const storeKey = storage?.key(STORE_KEY) ?? STORE_KEY;
+      if (event.key !== null && event.key !== debtKey && event.key !== storeKey) return;
       try { load(); } catch { validRef.current = false; }
     };
     window.addEventListener("storage", onStorage);
     return () => { window.clearTimeout(timer); window.removeEventListener("storage", onStorage); };
-  }, []);
+  }, [storage]);
 
 
   const commitDebts = useCallback((next: DebtItem[]) => {
@@ -48,14 +52,16 @@ export function useKasbonStore(writerEnabled = true) {
     const serialized = JSON.stringify(next);
     let previous: string | null | undefined;
     try {
-      previous = localStorage.getItem(DEBTS_KEY);
-      localStorage.setItem(DEBTS_KEY, serialized);
-      if (localStorage.getItem(DEBTS_KEY) !== serialized) throw new Error("Storage verification failed");
+      const target = storage ?? localStorage;
+      previous = target.getItem(DEBTS_KEY);
+      target.setItem(DEBTS_KEY, serialized);
+      if (target.getItem(DEBTS_KEY) !== serialized) throw new Error("Storage verification failed");
     } catch {
       try {
         if (typeof previous !== "undefined") {
-          if (previous === null) localStorage.removeItem(DEBTS_KEY);
-          else localStorage.setItem(DEBTS_KEY, previous);
+          const target = storage ?? localStorage;
+          if (previous === null) target.removeItem(DEBTS_KEY);
+          else target.setItem(DEBTS_KEY, previous);
         }
       } catch {}
       return false;
@@ -63,7 +69,7 @@ export function useKasbonStore(writerEnabled = true) {
     debtsRef.current = next;
     setDebts(next);
     return true;
-  }, [writerEnabled]);
+  }, [storage, writerEnabled]);
 
   const prepareDebt = useCallback((input: Omit<DebtItem, "id" | "remainingAmount" | "status" | "createdAt" | "paymentHistory">) => {
     assertValidAmount(input.totalAmount);
@@ -118,21 +124,23 @@ export function useKasbonStore(writerEnabled = true) {
     const serialized = JSON.stringify(value);
     let previous: string | null | undefined;
     try {
-      previous = localStorage.getItem(STORE_KEY);
-      localStorage.setItem(STORE_KEY, serialized);
-      if (localStorage.getItem(STORE_KEY) !== serialized) throw new Error("Storage verification failed");
+      const target = storage ?? localStorage;
+      previous = target.getItem(STORE_KEY);
+      target.setItem(STORE_KEY, serialized);
+      if (target.getItem(STORE_KEY) !== serialized) throw new Error("Storage verification failed");
     } catch {
       try {
         if (typeof previous !== "undefined") {
-          if (previous === null) localStorage.removeItem(STORE_KEY);
-          else localStorage.setItem(STORE_KEY, previous);
+          const target = storage ?? localStorage;
+          if (previous === null) target.removeItem(STORE_KEY);
+          else target.setItem(STORE_KEY, previous);
         }
       } catch {}
       return false;
     }
     setStoreState(value);
     return true;
-  }, [writerEnabled]);
+  }, [storage, writerEnabled]);
   const active = useMemo(() => debts.filter(debt => debt.status !== "PAID"), [debts]);
   const paid = useMemo(() => debts.filter(debt => debt.status === "PAID"), [debts]);
   const totalReceivable = useMemo(() => active.reduce((sum, debt) => sum + debt.remainingAmount, 0), [active]);

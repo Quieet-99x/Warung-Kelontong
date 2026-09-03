@@ -7,6 +7,7 @@ import { commitStorageTransaction, StorageInconsistentError } from "@/lib/storag
 import { newId } from "@/lib/utils";
 import type { InventoryAlternateUnit, InventoryItem, ShoppingListItem, StockMovementLog, StockMovementType, StockSelection } from "@/types/inventory";
 import type { PurchaseReceipt } from "@/types/receipt";
+import type { ScopedStorage } from "@/lib/scoped-storage";
 
 interface NewInventoryItem {
   name: string;
@@ -26,7 +27,7 @@ const validAlternateUnits = (units: InventoryAlternateUnit[] = []) => units.ever
   && Number.isSafeInteger(unit.lastCostPrice) && unit.lastCostPrice >= 0 && Number.isSafeInteger(unit.sellPrice) && unit.sellPrice >= 0);
 const itemBarcodes = (item: Pick<InventoryItem, "baseBarcode" | "alternateUnits">) => [normalizeBarcode(item.baseBarcode), ...(item.alternateUnits ?? []).map(unit => normalizeBarcode(unit.barcode))].filter(Boolean) as string[];
 
-export function useInventoryStore(writerEnabled = true) {
+export function useInventoryStore(writerEnabled = true, storage?: ScopedStorage) {
   const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [logs, setLogs] = useState<StockMovementLog[]>([]);
   const [shoppingList, setShoppingList] = useState<ShoppingListItem[]>([]);
@@ -41,9 +42,10 @@ export function useInventoryStore(writerEnabled = true) {
 
   useEffect(() => {
     const loadBundle = () => {
-      const inventoryRaw = localStorage.getItem(INVENTORY_KEYS.inventory);
-      const logsRaw = localStorage.getItem(INVENTORY_KEYS.logs);
-      const shoppingRaw = localStorage.getItem(INVENTORY_KEYS.shoppingList);
+      const target = storage ?? localStorage;
+      const inventoryRaw = target.getItem(INVENTORY_KEYS.inventory);
+      const logsRaw = target.getItem(INVENTORY_KEYS.logs);
+      const shoppingRaw = target.getItem(INVENTORY_KEYS.shoppingList);
       rawRef.current = new Map([
         [INVENTORY_KEYS.inventory, inventoryRaw],
         [INVENTORY_KEYS.logs, logsRaw],
@@ -71,21 +73,25 @@ export function useInventoryStore(writerEnabled = true) {
       finally { readyRef.current = true; setHydrated(true); }
     }, 0);
     const onStorage = (event: StorageEvent) => {
-      if (event.key !== null && !Object.values(INVENTORY_KEYS).includes(event.key as typeof INVENTORY_KEYS[keyof typeof INVENTORY_KEYS])) return;
+      const keys = Object.values(INVENTORY_KEYS).map(key => storage?.key(key) ?? key);
+      if (event.key !== null && !keys.includes(event.key)) return;
       try { loadBundle(); } catch { validRef.current = false; }
     };
     window.addEventListener("storage", onStorage);
     return () => { window.clearTimeout(timer); window.removeEventListener("storage", onStorage); };
-  }, []);
+  }, [storage]);
 
   const commit = useCallback((nextInventory: InventoryItem[], nextLogs: StockMovementLog[], nextShopping: ShoppingListItem[], extraWrites = new Map<string, string>()) => {
     if (!writerEnabled || !readyRef.current || !validRef.current) return false;
-    const writes = new Map(extraWrites);
-    writes.set(INVENTORY_KEYS.inventory, JSON.stringify(nextInventory));
-    writes.set(INVENTORY_KEYS.logs, JSON.stringify(nextLogs));
-    writes.set(INVENTORY_KEYS.shoppingList, JSON.stringify(nextShopping));
+    const writes = new Map([...extraWrites].map(([key, value]) => [storage?.key(key) ?? key, value]));
+    const inventoryKey = storage?.key(INVENTORY_KEYS.inventory) ?? INVENTORY_KEYS.inventory;
+    const logsKey = storage?.key(INVENTORY_KEYS.logs) ?? INVENTORY_KEYS.logs;
+    const shoppingKey = storage?.key(INVENTORY_KEYS.shoppingList) ?? INVENTORY_KEYS.shoppingList;
+    writes.set(inventoryKey, JSON.stringify(nextInventory));
+    writes.set(logsKey, JSON.stringify(nextLogs));
+    writes.set(shoppingKey, JSON.stringify(nextShopping));
     try {
-      if (!commitStorageTransaction(localStorage, writes, rawRef.current)) return false;
+      if (!commitStorageTransaction(localStorage, writes, new Map([...rawRef.current].map(([key, value]) => [storage?.key(key) ?? key, value])))) return false;
     } catch (error) {
       if (!(error instanceof StorageInconsistentError)) throw error;
       validRef.current = false;
@@ -93,9 +99,9 @@ export function useInventoryStore(writerEnabled = true) {
       return false;
     }
     rawRef.current = new Map([
-      [INVENTORY_KEYS.inventory, writes.get(INVENTORY_KEYS.inventory)!],
-      [INVENTORY_KEYS.logs, writes.get(INVENTORY_KEYS.logs)!],
-      [INVENTORY_KEYS.shoppingList, writes.get(INVENTORY_KEYS.shoppingList)!],
+      [INVENTORY_KEYS.inventory, writes.get(inventoryKey)!],
+      [INVENTORY_KEYS.logs, writes.get(logsKey)!],
+      [INVENTORY_KEYS.shoppingList, writes.get(shoppingKey)!],
     ]);
     inventoryRef.current = nextInventory;
     logsRef.current = nextLogs;
@@ -104,7 +110,7 @@ export function useInventoryStore(writerEnabled = true) {
     setLogs(nextLogs);
     setShoppingList(nextShopping);
     return true;
-  }, [writerEnabled]);
+  }, [storage, writerEnabled]);
 
   const addItem = useCallback((input: NewInventoryItem) => {
     if (!input.name.trim() || !input.unit.trim() || !Number.isFinite(input.currentStock) || input.currentStock < 0 || input.currentStock > MAX_STOCK_QUANTITY

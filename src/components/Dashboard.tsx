@@ -16,6 +16,7 @@ import { DebtCard } from "./DebtCard";
 import { Modal } from "./Modal";
 import { StockPicker } from "./StockPicker";
 import QRISModal from "./QRISModal";
+import type { ScopedStorage } from "@/lib/scoped-storage";
 
 export type KasbonStore = ReturnType<typeof useKasbonStore>;
 type ModalState = { kind: "add" | "pay" | "increase" | "settings" | "backup" | "delete"; debt?: DebtItem } | null;
@@ -26,6 +27,8 @@ interface DashboardProps {
   debtPrefill?: number | null;
   debtStockPrefill?: StockSelection[];
   inventoryStore?: InventoryStore;
+  localStore?: ScopedStorage;
+  sessionStore?: ScopedStorage;
   onDebtPrefillConsumed?: () => void;
 }
 
@@ -34,7 +37,7 @@ export default function Dashboard() {
   return <DashboardView store={store}/>;
 }
 
-export function DashboardView({ store, todayTurnover = 0, debtPrefill, debtStockPrefill = [], inventoryStore, onDebtPrefillConsumed }: DashboardProps) {
+export function DashboardView({ store, todayTurnover = 0, debtPrefill, debtStockPrefill = [], inventoryStore, localStore, sessionStore, onDebtPrefillConsumed }: DashboardProps) {
   const [tab, setTab] = useState<"active" | "paid">("active");
   const [search, setSearch] = useState("");
   const [modal, setModal] = useState<ModalState>(null);
@@ -87,13 +90,13 @@ export function DashboardView({ store, todayTurnover = 0, debtPrefill, debtStock
     <button className="debt-fab" type="button" aria-label="Catat kasbon" onClick={() => setModal({ kind: "add" })}><Plus size={25}/></button>
     <footer>Data tersimpan otomatis di perangkat ini · Gunakan cadangan saat pindah HP</footer>
 
-    <FormModal key={`${effectiveModal?.kind ?? "closed"}:${effectiveModal?.debt?.id ?? "new"}`} state={effectiveModal} close={closeModal} store={store} openBackup={() => setModal({ kind: "backup" })} selectExisting={debt => { clearFormDraft(DEBT_DRAFT_KEY); setModal({ kind: "increase", debt }); }} debtPrefill={debtPrefill} debtStockPrefill={debtStockPrefill} inventoryStore={inventoryStore}/>
+    <FormModal key={`${effectiveModal?.kind ?? "closed"}:${effectiveModal?.debt?.id ?? "new"}`} state={effectiveModal} close={closeModal} store={store} openBackup={() => setModal({ kind: "backup" })} selectExisting={debt => { clearFormDraft(DEBT_DRAFT_KEY, sessionStore); setModal({ kind: "increase", debt }); }} debtPrefill={debtPrefill} debtStockPrefill={debtStockPrefill} inventoryStore={inventoryStore} draftStorage={sessionStore}/>
     <DeleteDebtModal state={effectiveModal} close={closeModal} store={store} error={deleteError} setError={setDeleteError}/>
-    <BackupModal open={effectiveModal?.kind === "backup"} onClose={() => setModal(null)} storeProfile={store.store} debts={store.debts} onRestored={() => window.location.reload()} canReset={store.canMutate()}/>
+    <BackupModal open={effectiveModal?.kind === "backup"} onClose={() => setModal(null)} storeProfile={store.store} debts={store.debts} localStore={localStore} sessionStore={sessionStore} onRestored={() => window.location.reload()} canReset={store.canMutate()}/>
   </main>;
 }
 
-function FormModal({ state, close, store, openBackup, selectExisting, debtPrefill, debtStockPrefill, inventoryStore }: {
+function FormModal({ state, close, store, openBackup, selectExisting, debtPrefill, debtStockPrefill, inventoryStore, draftStorage }: {
   state: ModalState;
   close: () => void;
   store: KasbonStore;
@@ -102,6 +105,7 @@ function FormModal({ state, close, store, openBackup, selectExisting, debtPrefil
   debtPrefill?: number | null;
   debtStockPrefill: StockSelection[];
   inventoryStore?: InventoryStore;
+  draftStorage?: ScopedStorage;
 }) {
   const [saveError, setSaveError] = useState("");
   const [stockItems, setStockItems] = useState<StockSelection[]>(state?.kind === "add" ? debtStockPrefill : []);
@@ -114,7 +118,7 @@ function FormModal({ state, close, store, openBackup, selectExisting, debtPrefil
   const [qrisCropPreview, setQrisCropPreview] = useState("");
   const [qrisCrop, setQrisCrop] = useState<QrisCrop>({ zoom: 1, x: 0, y: 0 });
   const [qrisImageSize, setQrisImageSize] = useState({ width: 0, height: 0 });
-  const [debtDraft, setDebtDraft] = useState<DebtFormDraft>(() => readDebtDraft() ?? {
+  const [debtDraft, setDebtDraft] = useState<DebtFormDraft>(() => readDebtDraft(draftStorage) ?? {
     name: "", phone: "", items: "", amount: debtPrefill ? String(debtPrefill) : "", due: "",
   });
   const existingCustomers = useMemo(() => {
@@ -130,8 +134,8 @@ function FormModal({ state, close, store, openBackup, selectExisting, debtPrefil
     return [...unique.values()];
   }, [store.debts]);
   useEffect(() => {
-    if (state?.kind === "add") writeFormDraft(DEBT_DRAFT_KEY, debtDraft);
-  }, [debtDraft, state?.kind]);
+    if (state?.kind === "add") writeFormDraft(DEBT_DRAFT_KEY, debtDraft, draftStorage);
+  }, [debtDraft, draftStorage, state?.kind]);
   useEffect(() => () => { if (qrisCropPreview) URL.revokeObjectURL(qrisCropPreview); }, [qrisCropPreview]);
   const qrisPreviewGeometry = qrisImageSize.width && qrisImageSize.height
     ? calculateCropPreviewGeometry(qrisImageSize.width, qrisImageSize.height, qrisCrop)
@@ -189,7 +193,7 @@ function FormModal({ state, close, store, openBackup, selectExisting, debtPrefil
       return;
     }
     setSaveError("");
-    if (state.kind === "add") clearFormDraft(DEBT_DRAFT_KEY);
+    if (state.kind === "add") clearFormDraft(DEBT_DRAFT_KEY, draftStorage);
     if (state.kind === "pay" && state.debt && payment === state.debt.remainingAmount) feedback.playKaching();
     close();
   };
@@ -247,7 +251,7 @@ function FormModal({ state, close, store, openBackup, selectExisting, debtPrefil
         <button type="button" className="data-center-entry" onClick={openBackup}><DatabaseBackup size={20}/><span><strong>Pusat Data & Cadangan</strong><small>Export rekap, backup, atau pulihkan data</small></span></button>
       </>}
       {saveError && <p className="delete-error" role="alert">{saveError}</p>}
-      <div className="form-actions"><button type="button" onClick={() => { if (state.kind === "add") clearFormDraft(DEBT_DRAFT_KEY); close(); }}>Batal</button><button className="primary form-submit" type="submit" disabled={qrisProcessing}>Simpan catatan</button></div>
+      <div className="form-actions"><button type="button" onClick={() => { if (state.kind === "add") clearFormDraft(DEBT_DRAFT_KEY, draftStorage); close(); }}>Batal</button><button className="primary form-submit" type="submit" disabled={qrisProcessing}>Simpan catatan</button></div>
     </form>
   </Modal><QRISModal open={qrisOpen} onClose={() => setQrisOpen(false)} store={store.store} amount={qrisAmount}/></>;
 }

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DAILY_CLOSINGS_KEY } from "@/lib/cashflow-storage";
 import { APPLICATION_RESET_SIGNAL_KEY, SESSION_STORAGE_KEYS } from "@/lib/backup";
 import WarungApp from "./WarungApp";
+import { scopedStorageKey } from "@/lib/scoped-storage";
 
 describe("Warung app navigation", () => {
   beforeEach(() => {
@@ -15,6 +16,33 @@ describe("Warung app navigation", () => {
         await callback({});
       }),
     } });
+  });
+
+  it("starts a signed-in account blank and ignores unscoped testing data", async () => {
+    localStorage.setItem("buku-kasbon.debts.v1", JSON.stringify([{
+      id: "testing", customerName: "Data Testing", phoneNumber: "081234567890", itemsDescription: "Lama",
+      totalAmount: 50_000, remainingAmount: 50_000, status: "UNPAID", createdAt: new Date().toISOString(), paymentHistory: [],
+    }]));
+
+    render(<WarungApp accountId="google-user-a"/>);
+
+    await waitFor(() => expect(screen.getByText("Belum ada kasbon aktif")).toBeInTheDocument());
+    expect(screen.queryByText("Data Testing")).not.toBeInTheDocument();
+  });
+
+  it("writes signed-in account data only to its account namespace", async () => {
+    render(<WarungApp accountId="google-user-a"/>);
+    await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
+    await userEvent.click(screen.getAllByRole("button", { name: "Catat kasbon" })[0]);
+    await userEvent.type(screen.getByRole("textbox", { name: "Nama pelanggan" }), "Siti");
+    await userEvent.type(screen.getByRole("textbox", { name: "Nomor WhatsApp" }), "081234567890");
+    await userEvent.type(screen.getByRole("textbox", { name: "Barang yang diambil" }), "Beras");
+    await userEvent.type(screen.getByRole("spinbutton", { name: "Total kasbon" }), "10000");
+    await userEvent.click(screen.getByRole("button", { name: "Simpan catatan" }));
+
+    expect(localStorage.getItem("buku-kasbon.debts.v1")).toBeNull();
+    expect(JSON.parse(localStorage.getItem(scopedStorageKey("google-user-a", "buku-kasbon.debts.v1")) ?? "[]"))
+      .toHaveLength(1);
   });
 
   it("keeps a second tab read-only when the writer lock is unavailable", async () => {
