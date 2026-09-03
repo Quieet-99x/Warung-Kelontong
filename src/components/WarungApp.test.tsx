@@ -186,7 +186,8 @@ describe("Warung app navigation", () => {
     await waitFor(() => expect(screen.getByPlaceholderText(/Cari nama, nomor HP/i)).toBeInTheDocument());
     await userEvent.click(screen.getByRole("button", { name: /Buka kasir cepat/i }));
     await userEvent.type(screen.getByRole("textbox", { name: /Total belanjaan/i }), "28000");
-    await userEvent.selectOptions(await screen.findByRole("combobox", { name: /Tambah barang dari stok/i }), "stock-1");
+    await userEvent.type(screen.getByRole("searchbox", { name: "Cari barang dari stok" }), "Minyakita");
+    await userEvent.click(await screen.findByRole("button", { name: "Tambah Minyakita 1L" }));
     await userEvent.clear(screen.getByRole("spinbutton", { name: "Jumlah Minyakita 1L" }));
     await userEvent.type(screen.getByRole("spinbutton", { name: "Jumlah Minyakita 1L" }), "2");
     await userEvent.click(screen.getByRole("button", { name: "Pesanan Selesai" }));

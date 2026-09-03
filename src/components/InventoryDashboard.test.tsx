@@ -29,6 +29,24 @@ describe("InventoryDashboard", () => {
     expect(screen.getByRole("status")).toHaveTextContent(/dikurangi 1/i);
   });
 
+  it("finds stock using broader token matching and offers typo suggestions", async () => {
+    const store = createStore();
+    store.inventory = [
+      { ...item, id: "stock-1", name: "Minyakita Goreng 1 Liter" },
+      { ...item, id: "stock-2", name: "Indomie Goreng" },
+    ];
+    render(<InventoryDashboard store={store}/>);
+    const search = screen.getByRole("searchbox", { name: "Cari nama barang" });
+
+    await userEvent.type(search, "goreng minyak");
+    expect(screen.getByText("Minyakita Goreng 1 Liter")).toBeInTheDocument();
+    expect(screen.queryByText("Indomie Goreng")).not.toBeInTheDocument();
+
+    await userEvent.clear(search);
+    await userEvent.type(search, "minykita");
+    expect(screen.getByText(/Mungkin yang dimaksud/i)).toHaveTextContent("Minyakita Goreng 1 Liter");
+  });
+
   it("shows stock information with an icon-only barcode scan FAB", () => {
     render(<InventoryDashboard store={createStore()}/>);
     expect(screen.queryByText(/Modal terakhir/i)).not.toBeInTheDocument();

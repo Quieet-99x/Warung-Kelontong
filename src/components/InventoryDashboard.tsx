@@ -4,6 +4,7 @@ import { AlertTriangle, Check, ClipboardList, History, Package, PackagePlus, Pen
 import { useMemo, useState } from "react";
 import type { useInventoryStore } from "@/hooks/useInventoryStore";
 import { findInventoryByBarcode } from "@/lib/inventory-barcode";
+import { searchItemNames } from "@/lib/item-search";
 import { MAX_STOCK_QUANTITY } from "@/lib/inventory-storage";
 import type { InventoryItem, WholesaleUnitName } from "@/types/inventory";
 import { BarcodeScanner } from "./BarcodeScanner";
@@ -21,10 +22,8 @@ export default function InventoryDashboard({ store }: { store: InventoryStore })
   const [status, setStatus] = useState("");
   const [scannerOpen, setScannerOpen] = useState(false);
   const [scannedBarcode, setScannedBarcode] = useState("");
-  const list = useMemo(() => store.inventory.filter(item => {
-    const matches = item.name.toLocaleLowerCase("id-ID").includes(search.trim().toLocaleLowerCase("id-ID"));
-    return matches && (filter === "all" || item.currentStock <= item.minStockAlert);
-  }), [filter, search, store.inventory]);
+  const searchResult = useMemo(() => searchItemNames(store.inventory, search), [search, store.inventory]);
+  const list = useMemo(() => searchResult.matches.filter(item => filter === "all" || item.currentStock <= item.minStockAlert), [filter, searchResult.matches]);
 
   const report = (saved: boolean, success: string) => setStatus(saved ? success : "Perubahan stok belum dapat disimpan di perangkat.");
   if (!store.hydrated) return <main className="inventory-page loading">Membuka data stok…</main>;
@@ -34,7 +33,8 @@ export default function InventoryDashboard({ store }: { store: InventoryStore })
     <section className="inventory-content">
       {store.storageIssue && <p className="inventory-status" role="alert">{store.storageIssue}</p>}
       {status && <p className="inventory-status" role="status">{status}</p>}
-      <div className="inventory-tools"><label><Search size={18}/><input aria-label="Cari nama barang" placeholder="Cari nama barang…" value={search} onChange={event => setSearch(event.target.value)}/></label><button type="button" onClick={() => setEdit("new")}><Plus size={18}/> Barang</button></div>
+      <div className="inventory-tools"><label><Search size={18}/><input type="search" aria-label="Cari nama barang" placeholder="Cari beberapa kata nama barang…" value={search} onChange={event => setSearch(event.target.value)}/></label><button type="button" onClick={() => setEdit("new")}><Plus size={18}/> Barang</button></div>
+      {search.trim() && !list.length && searchResult.suggestions.length > 0 && <div className="search-suggestions"><span>Mungkin yang dimaksud: {searchResult.suggestions.map(item => item.name).join(", ")}</span>{searchResult.suggestions.map(item => <button key={item.id} type="button" onClick={() => setSearch(item.name)}>{item.name}</button>)}</div>}
       <nav className="inventory-filters" aria-label="Filter stok"><button className={filter === "all" ? "active" : ""} onClick={() => setFilter("all")}>Semua <b>{store.inventory.length}</b></button><button className={filter === "low" ? "active" : ""} onClick={() => setFilter("low")}><AlertTriangle size={15}/> Stok menipis <b>{store.lowStock.length}</b></button></nav>
       <div className="inventory-list">{list.map(item => {
         const low = item.currentStock <= item.minStockAlert;

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { DailyClosingStore } from "@/hooks/useDailyClosingStore";
@@ -59,14 +59,13 @@ describe("CashflowDashboard monthly revenue chart", () => {
 
     const hero = document.querySelector(".cashflow-hero") as HTMLElement;
     const chart = hero.querySelector(".revenue-chart-card") as HTMLElement;
-    const download = hero.querySelector(".download-financial") as HTMLElement;
     const headline = hero.querySelector("h1") as HTMLElement;
     expect(hero.dataset.theme).toBe("green");
     expect(hero.firstElementChild).toBe(headline);
     expect(document.querySelectorAll(".revenue-chart-card")).toHaveLength(1);
     expect(document.querySelector(".monthly-cash-card .revenue-chart-card")).not.toBeInTheDocument();
     expect(headline.compareDocumentPosition(chart) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(chart.compareDocumentPosition(download) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(hero.querySelector(".download-financial")).not.toBeInTheDocument();
     expect(headline.textContent).toBe("BUKU KAS & LAPORAN");
     expect(hero.querySelector(".cashflow-hero-copy")).not.toBeInTheDocument();
     expect(hero.querySelector(".cashflow-hero-turnover")).not.toBeInTheDocument();
@@ -85,6 +84,19 @@ describe("CashflowDashboard monthly revenue chart", () => {
 
     expect(picker).toHaveValue("2026-08");
     expect(screen.getByRole("img", { name: /Grafik omset harian Agustus 2026/i })).toBeInTheDocument();
+  });
+
+  it("opens a month chooser from a floating report button before downloading", async () => {
+    render(<CashflowDashboard debts={[]} receipts={[]} closingStore={closingStore}/>);
+
+    const trigger = screen.getByRole("button", { name: "Download laporan bulanan" });
+    expect(trigger).toHaveClass("module-report-fab");
+    expect(screen.queryByRole("dialog", { name: "Download laporan bulanan" })).not.toBeInTheDocument();
+
+    await userEvent.click(trigger);
+    const dialog = screen.getByRole("dialog", { name: "Download laporan bulanan" });
+    expect(within(dialog).getByLabelText("Bulan laporan")).toHaveValue("2026-08");
+    expect(within(dialog).getByRole("button", { name: "Download CSV" })).toBeInTheDocument();
   });
 
   it("plays success feedback only after closing is saved", async () => {

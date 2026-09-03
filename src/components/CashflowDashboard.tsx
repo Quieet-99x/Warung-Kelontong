@@ -10,6 +10,7 @@ import { feedback } from "@/lib/feedback";
 import type { DebtItem } from "@/types";
 import type { PurchaseReceipt } from "@/types/receipt";
 import { RevenueChart } from "./RevenueChart";
+import { Modal } from "./Modal";
 
 interface CashflowDashboardProps {
   debts: DebtItem[];
@@ -34,6 +35,8 @@ export default function CashflowDashboard({ debts, receipts, closingStore }: Cas
   const [notesDraft, setNotesDraft] = useState<string | null>(null);
   const [status, setStatus] = useState("");
   const [chartType, setChartType] = useState<"bar" | "line">("bar");
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportMonth, setReportMonth] = useState(currentMonth);
   const metrics = useMemo(() => calculateDailyMetrics(today, debts, receipts), [today, debts, receipts]);
   const summary = useMemo(() => calculateMonthlySummary(month, closingStore.closings, receipts, debts), [month, closingStore.closings, receipts, debts]);
   const income = incomeDraft ?? String(existing?.manualIncome ?? 0);
@@ -63,16 +66,16 @@ export default function CashflowDashboard({ debts, receipts, closingStore }: Cas
     setStatus(saved ? "Tutup buku hari ini berhasil disimpan." : "Data belum tersimpan. Periksa ruang penyimpanan perangkat.");
   };
   const download = () => {
-    const csv = buildCashflowMonthlyCSV(month, closingStore.closings, receipts, debts);
-    downloadTextFile(csv, "text/csv;charset=utf-8", `Laporan_Keuangan_Warung_${month}.csv`);
-    setStatus(`Laporan ${month} berhasil disiapkan.`);
+    const csv = buildCashflowMonthlyCSV(reportMonth, closingStore.closings, receipts, debts);
+    downloadTextFile(csv, "text/csv;charset=utf-8", `Laporan_Keuangan_Warung_${reportMonth}.csv`);
+    setStatus(`Laporan ${reportMonth} berhasil disiapkan.`);
+    setReportOpen(false);
   };
 
   return <main className="cashflow-page">
     <section className="cashflow-hero" data-theme="green">
       <h1>BUKU KAS & LAPORAN</h1>
       <RevenueChart month={month} closings={closingStore.closings} type={chartType} onTypeChange={setChartType}/>
-      <button className="download-financial" type="button" onClick={download}><Download size={18}/> Download Laporan Bulanan (.csv)</button>
     </section>
 
     <section className="daily-cash-card">
@@ -102,5 +105,12 @@ export default function CashflowDashboard({ debts, receipts, closingStore }: Cas
       <div className="receivable-health"><h3>Kesehatan Piutang</h3><div><span>Kasbon berhasil ditagih</span><strong>{compactIDR(summary.totalDebtsCollected)}</strong></div><div><span>Kasbon baru masih menggantung</span><strong>{compactIDR(summary.totalNewDebts)}</strong></div></div>
     </section>
     {status && <p className="cashflow-status" role="status">{status}</p>}
+    <button className="module-report-fab" type="button" aria-label="Download laporan bulanan" onClick={() => { setReportMonth(month); setReportOpen(true); }}><Download aria-hidden="true"/></button>
+    <Modal open={reportOpen} title="Download laporan bulanan" subtitle="Pilih bulan yang ingin dibuat menjadi file CSV" onClose={() => setReportOpen(false)}>
+      <form className="form report-download-form" onSubmit={event => { event.preventDefault(); download(); }}>
+        <label className="field"><span>Bulan laporan</span><input aria-label="Bulan laporan" type="month" value={reportMonth} onChange={event => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(event.target.value)) setReportMonth(event.target.value); }}/></label>
+        <div className="form-actions"><button type="button" onClick={() => setReportOpen(false)}>Batal</button><button className="primary" type="submit"><Download size={17}/> Download CSV</button></div>
+      </form>
+    </Modal>
   </main>;
 }

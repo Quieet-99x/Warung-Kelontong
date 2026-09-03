@@ -3,6 +3,11 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import QuickCalculator from "./QuickCalculator";
 
+const inventory = [
+  { id: "stock-1", name: "Minyakita Goreng 1L", currentStock: 8, unit: "pcs", lastCostPrice: 0, minStockAlert: 2, updatedAt: "2026-08-31T10:00:00.000Z", baseBarcode: "8990001" },
+  { id: "stock-2", name: "Indomie Goreng", currentStock: 12, unit: "pcs", lastCostPrice: 0, minStockAlert: 3, updatedAt: "2026-08-31T10:00:00.000Z" },
+];
+
 describe("QuickCalculator", () => {
   beforeEach(cleanup);
   it("shows an inline error for invalid expressions and disables actions", async () => {
@@ -98,10 +103,24 @@ describe("QuickCalculator", () => {
     await waitFor(() => expect(debtInput).toHaveFocus());
   });
 
-  it("keeps barcode scanning out of the cashier workflow", async () => {
-    render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => true}/>);
+  it("searches stock with typo suggestions instead of a product select", async () => {
+    render(<QuickCalculator inventory={inventory} onCreateDebt={() => {}} onAddIncome={() => true}/>);
     await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
-    expect(screen.queryByRole("button", { name: /Scan barcode/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: /Tambah barang dari stok/i })).not.toBeInTheDocument();
+    const search = screen.getByRole("searchbox", { name: "Cari barang dari stok" });
+    await userEvent.type(search, "minykita");
+    expect(screen.getByText(/Mungkin yang dimaksud/i)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Tambah Minyakita Goreng 1L/i }));
+    expect(screen.getByLabelText("Jumlah Minyakita Goreng 1L")).toHaveValue(1);
+  });
+
+  it("scans a registered stock barcode into the cashier cart", async () => {
+    render(<QuickCalculator inventory={inventory} onCreateDebt={() => {}} onAddIncome={() => true}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    await userEvent.click(screen.getByRole("button", { name: "Scan barcode barang" }));
+    await userEvent.type(screen.getByLabelText("Nomor barcode"), "8990001");
+    await userEvent.click(screen.getByRole("button", { name: "Gunakan barcode" }));
+    expect(screen.getByLabelText("Jumlah Minyakita Goreng 1L")).toHaveValue(1);
   });
 
   it("orders the simplified cashier workflow", async () => {
@@ -116,5 +135,17 @@ describe("QuickCalculator", () => {
     expect(stock.compareDocumentPosition(buyerCash) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(buyerCash.compareDocumentPosition(summary) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(summary.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("stacks total above change with a stronger total hierarchy", async () => {
+    render(<QuickCalculator onCreateDebt={() => {}} onAddIncome={() => true}/>);
+    await userEvent.click(screen.getByRole("button", { name: /Buka kalkulator kasir/i }));
+    const summary = document.querySelector(".cashier-summary") as HTMLElement;
+    const total = summary.querySelector(".cashier-total") as HTMLElement;
+    const change = summary.querySelector(".change-card") as HTMLElement;
+    expect(summary).toHaveClass("cashier-summary-stacked");
+    expect([...summary.children]).toEqual([total, change]);
+    expect(total.querySelector("strong")).toHaveClass("cashier-total-value");
+    expect(change.querySelector("strong")).toHaveClass("cashier-change-value");
   });
 });
